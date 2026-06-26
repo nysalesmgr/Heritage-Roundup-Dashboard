@@ -772,7 +772,7 @@ function editCell(td, ref, field, type){
   let input;
   if(type==='season'){
     input = document.createElement('select');
-    const opts = ['—','Fall 2025','Spring 2026','Summer 2026','Fall 2026','Spring 2027','Summer 2027'];
+    const opts = ['—','Summer','Fall','Sub-License'];
     opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; input.appendChild(op); });
   } else if(type==='student'){
     input = document.createElement('select');
