@@ -664,30 +664,14 @@ function showView(v){
 // ── REFRESH ───────────────────────────────────────────────
 function refreshAll(){
   const total = apps.length;
-  const isNY  = currentProperty === 'newyork';
+  const pend  = apps.filter(a=>['Pending Review','Pending VMU','Pending IPT','Recap Sent'].includes(a.status)).length;
+  const appr  = apps.filter(a=>a.status==='Agreement Issued').length;
+  const rej   = apps.filter(a=>['To Drop','Drop Out ($500)'].includes(a.status)).length;
 
-  let pend, appr, rej;
-  if(isNY){
-    pend  = apps.filter(a=>['Pending Review','Pending VMU','Pending IPT','Recap Sent'].includes(a.status)).length;
-    appr  = apps.filter(a=>a.status==='Agreement Issued').length;
-    rej   = apps.filter(a=>['To Drop','Drop Out ($500)'].includes(a.status)).length;
-    document.getElementById('ov-pend-label').textContent  = 'In Pipeline';
-    document.getElementById('ov-appr-label').textContent  = 'Agreement Issued';
-    document.getElementById('ov-rej-label').textContent   = 'To Drop / Drop Out';
-    document.getElementById('recent-section-title').textContent = 'Today & Yesterday';
-    // Show Finish Line section
-    document.getElementById('finish-line-section').style.display = 'block';
-    renderFinishLine();
-  } else {
-    pend  = apps.filter(a=>a.status==='Pending Review').length;
-    appr  = apps.filter(a=>a.status==='Approved').length;
-    rej   = apps.filter(a=>a.status==='Rejected'||a.status==='On Hold').length;
-    document.getElementById('ov-pend-label').textContent  = 'Pending Review';
-    document.getElementById('ov-appr-label').textContent  = 'Approved';
-    document.getElementById('ov-rej-label').textContent   = 'Rejected / Hold';
-    document.getElementById('recent-section-title').textContent = 'Today & Yesterday';
-    document.getElementById('finish-line-section').style.display = 'none';
-  }
+  document.getElementById('ov-pend-label').textContent  = 'In Pipeline';
+  document.getElementById('ov-appr-label').textContent  = 'Agreement Issued';
+  document.getElementById('ov-rej-label').textContent   = 'To Drop / Drop Out';
+  document.getElementById('finish-line-section').style.display = 'block';
 
   document.getElementById('ov-total').textContent = total;
   document.getElementById('ov-pend').textContent  = pend;
@@ -698,6 +682,7 @@ function refreshAll(){
   document.getElementById('sb-appr').textContent  = appr;
   document.getElementById('pending-badge').textContent = pend;
   renderRecent();
+  renderFinishLine();
   if(document.getElementById('view-applications').classList.contains('on')) renderTable();
 }
 
@@ -815,7 +800,7 @@ function editCell(td, ref, field, type){
   }
 }
 
-function nyCell(ref, field, type){ const val=getNYData(ref)[field]||''; return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?val:'—'}</span></td>`; }
+function nyCell(ref, field, type, fallback){ const val=getNYData(ref)[field]||(fallback||''); return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?val:'—'}</span></td>`; }
 
 // ── APPLICATIONS TABLE ────────────────────────────────────
 function renderTable(){
@@ -836,50 +821,31 @@ function renderTable(){
   if(srt==='date-desc') filtered.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
   else if(srt==='date-asc') filtered.sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
   else if(srt==='name-asc') filtered.sort((a,b)=>(a.last_name||'').localeCompare(b.last_name||''));
-  else if(srt==='status'){ const o={'Pending Review':0,'On Hold':1,'Approved':2,'Rejected':3}; filtered.sort((a,b)=>(o[a.status]||9)-(o[b.status]||9)); }
+  else if(srt==='status'){ const o={'Pending Review':0,'Pending VMU':1,'Pending IPT':2,'Recap Sent':3,'Agreement Issued':4,'Revived':5,'To Drop':6,'Drop Out ($500)':7,'Payment Received/Finalized':8}; filtered.sort((a,b)=>(o[a.status]||9)-(o[b.status]||9)); }
 
   document.getElementById('filter-count').textContent = filtered.length + ' of ' + apps.length;
+  if(!filtered.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="13">No applications match your filters</td></tr>`; return; }
 
-  if(!filtered.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="7">No applications match your filters</td></tr>`; return; }
+  document.querySelector('#view-applications thead tr').innerHTML = `
+    <th>Date of Submission</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
+    <th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Status</th>`;
 
-  const isNY = currentProperty === 'newyork';
-
-  if(isNY){
-    // NY columns
-    document.querySelector('#view-applications thead tr').innerHTML = `
-      <th>Date of Submission</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
-      <th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Status</th>`;
-    tbody.innerHTML = filtered.map(a=>`
-      <tr>
-        <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
-        ${nyCell(a.ref_number,'season','season')}
-        <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
-        ${nyCell(a.ref_number,'lead_source','text')}
-        ${nyCell(a.ref_number,'unit','text')}
-        ${nyCell(a.ref_number,'move_in','date')}
-        ${nyCell(a.ref_number,'move_out','date')}
-        ${nyCell(a.ref_number,'monthly_rent','text')}
-        ${nyCell(a.ref_number,'vmu','date')}
-        ${nyCell(a.ref_number,'ipt','date')}
-        ${nyCell(a.ref_number,'student_status','student')}
-        ${nyCell(a.ref_number,'prev_accommodation','text')}
-        <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
-      </tr>`).join('');
-  } else {
-    // Boston columns
-    document.querySelector('#view-applications thead tr').innerHTML = `
-      <th>Reference</th><th>Applicant</th><th>Unit / Type</th><th>Move-in</th><th>Submitted</th><th>Source</th><th>Status</th>`;
-    tbody.innerHTML = filtered.map(a=>`
-      <tr onclick="openPanel('${esc(a.ref_number)}')">
-        <td>${a._source==='Booking Engine' ? `<span class="td-ref">${esc(a.ref_number||'—')}</span>` : `<span class="td-date">${fmtDate(a.created_at)}</span>`}</td>
-        <td><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
-        <td><div class="td-unit">${esc(aptTitle(a))}${bedroomPill(a)}</div></td>
-        <td><span class="td-date">${a._source==='Booking Engine' ? fmtDate(a.start_date) : '—'}</span></td>
-        <td><span class="td-date">${fmtDateTime(a.created_at)}</span></td>
-        <td>${srcBadge(a._source)}</td>
-        <td>${badge(a.status)}</td>
-      </tr>`).join('');
-  }
+  tbody.innerHTML = filtered.map(a=>`
+    <tr>
+      <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
+      ${nyCell(a.ref_number,'season','season')}
+      <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
+      ${nyCell(a.ref_number,'lead_source','text')}
+      ${nyCell(a.ref_number,'unit','text', a._source==='Booking Engine' ? aptTitle(a) : '')}
+      ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : '')}
+      ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : '')}
+      ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
+      ${nyCell(a.ref_number,'vmu','date')}
+      ${nyCell(a.ref_number,'ipt','date')}
+      ${nyCell(a.ref_number,'student_status','student')}
+      ${nyCell(a.ref_number,'prev_accommodation','text')}
+      <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
+    </tr>`).join('');
 }
 
 // ── DETAIL PANEL ──────────────────────────────────────────
@@ -896,22 +862,17 @@ function openPanel(ref){
 
   // Action buttons
   const acts = document.getElementById('pan-acts');
-  acts.innerHTML = isNY ? `
-    ${a.status!=='Pending VMU'       ? `<button class="btn" style="background:var(--vmu-bg);color:var(--vmu)" onclick="setStatus('${esc(ref)}','Pending VMU')">Pending VMU</button>` : ''}
-    ${a.status!=='Pending IPT'       ? `<button class="btn" style="background:var(--ipt-bg);color:var(--ipt)" onclick="setStatus('${esc(ref)}','Pending IPT')">Pending IPT</button>` : ''}
-    ${a.status!=='Recap Sent'        ? `<button class="btn" style="background:var(--recap-bg);color:var(--recap)" onclick="setStatus('${esc(ref)}','Recap Sent')">Recap Sent</button>` : ''}
-    ${a.status!=='Agreement Issued'  ? `<button class="btn" style="background:var(--agr-bg);color:var(--agr)" onclick="setStatus('${esc(ref)}','Agreement Issued')">Agreement Issued</button>` : ''}
-    ${a.status!=='To Drop'           ? `<button class="btn" style="background:var(--todrop-bg);color:var(--todrop)" onclick="setStatus('${esc(ref)}','To Drop')">To Drop</button>` : ''}
-    ${a.status!=='Drop Out ($500)'   ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${esc(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
-    ${a.status!=='Revived'           ? `<button class="btn" style="background:var(--revived-bg);color:var(--revived)" onclick="setStatus('${esc(ref)}','Revived')">Revived</button>` : ''}
-    ${a.status!=='Payment Received/Finalized'  ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
-    ${a.status!=='Pending Review'    ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
-  ` : `
-    ${a.status!=='Approved'      ? `<button class="btn btn-approve" onclick="setStatus('${esc(ref)}','Approved')">✓ Approve</button>` : ''}
-    ${a.status!=='Rejected'      ? `<button class="btn btn-reject"  onclick="setStatus('${esc(ref)}','Rejected')">✗ Reject</button>` : ''}
-    ${a.status!=='On Hold'       ? `<button class="btn btn-hold"    onclick="setStatus('${esc(ref)}','On Hold')">◷ Hold</button>` : ''}
-    ${a.status!=='Pending Review'? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Pending</button>` : ''}
-    ${isBookingEngine ? `<button class="btn btn-rms" onclick="openRmsModal()">⬡ Create in RMS Cloud</button>` : ''}
+  acts.innerHTML = `
+    ${a.status!=='Pending VMU'              ? `<button class="btn" style="background:var(--vmu-bg);color:var(--vmu)" onclick="setStatus('${esc(ref)}','Pending VMU')">Pending VMU</button>` : ''}
+    ${a.status!=='Pending IPT'              ? `<button class="btn" style="background:var(--ipt-bg);color:var(--ipt)" onclick="setStatus('${esc(ref)}','Pending IPT')">Pending IPT</button>` : ''}
+    ${a.status!=='Recap Sent'               ? `<button class="btn" style="background:var(--recap-bg);color:var(--recap)" onclick="setStatus('${esc(ref)}','Recap Sent')">Recap Sent</button>` : ''}
+    ${a.status!=='Agreement Issued'         ? `<button class="btn" style="background:var(--agr-bg);color:var(--agr)" onclick="setStatus('${esc(ref)}','Agreement Issued')">Agreement Issued</button>` : ''}
+    ${a.status!=='Revived'                  ? `<button class="btn" style="background:var(--revived-bg);color:var(--revived)" onclick="setStatus('${esc(ref)}','Revived')">Revived</button>` : ''}
+    ${a.status!=='To Drop'                  ? `<button class="btn" style="background:var(--todrop-bg);color:var(--todrop)" onclick="setStatus('${esc(ref)}','To Drop')">To Drop</button>` : ''}
+    ${a.status!=='Drop Out ($500)'          ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${esc(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
+    ${a.status!=='Payment Received/Finalized' ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
+    ${a.status!=='Pending Review'           ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
+    ${isBookingEngine                       ? `<button class="btn btn-rms" onclick="openRmsModal()">⬡ Create in RMS Cloud</button>` : ''}
   `;
 
   // Build tabs dynamically
