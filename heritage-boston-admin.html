@@ -872,7 +872,7 @@ function openPanel(ref){
     ${a.status!=='Drop Out ($500)'          ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${esc(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
     ${a.status!=='Payment Received/Finalized' ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
     ${a.status!=='Pending Review'           ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
-    ${isBookingEngine                       ? `<button class="btn btn-rms" onclick="openRmsModal()">⬡ Create in RMS Cloud</button>` : ''}
+    <button class="btn btn-rms" onclick="openRmsModal()">⬡ Create in RMS Cloud</button>
   `;
 
   // Build tabs dynamically
