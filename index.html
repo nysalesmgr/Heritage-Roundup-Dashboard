@@ -145,7 +145,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
 .tl-dot.todrop{background:var(--todrop)}.tl-dot.dropout{background:var(--dropout)}
 .tl-dot.paymentreceived{background:var(--payrcvd)}
-.tl-dot.revived{background:var(--revived)}
+.tl-dot.note{background:#9097b8}
 .badge.approved{background:var(--appr-bg);color:#065F46}
 .badge.rejected{background:var(--rej-bg);color:#991B1B}
 .badge.hold{background:var(--hold-bg);color:#3730A3}
@@ -647,7 +647,7 @@ function setNYStatus(ref, status){
 // ── NOTES & HISTORY ───────────────────────────────────────
 function getNotes(){ try{ return JSON.parse(localStorage.getItem(NOTES_KEY)||'{}'); }catch(e){ return {}; } }
 function getHistory(){ try{ return JSON.parse(localStorage.getItem(HISTORY_KEY)||'{}'); }catch(e){ return {}; } }
-function saveHistoryEntry(ref, status){ const h=getHistory(); if(!h[ref]) h[ref]=[]; h[ref].push({status, changedAt:new Date().toISOString()}); localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+function saveHistoryEntry(ref, status, type){ const h=getHistory(); if(!h[ref]) h[ref]=[]; h[ref].push({status, changedAt:new Date().toISOString(), type:type||statusClass(status)}); localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
 
 // ── NAVIGATION ────────────────────────────────────────────
 function showView(v){
@@ -941,9 +941,9 @@ function openPanel(ref){
   document.getElementById('notes-text').value = notes[ref]||'';
   const history = getHistory();
   const hs = history[ref] || [];
-  const allEntries = hs.length ? hs : [{ status: a.status||'Pending Review', changedAt: a.created_at||'' }];
+  const allEntries = hs.length ? hs : [{ status: a.status||'Pending Review', changedAt: a.created_at||'', type: statusClass(a.status||'Pending Review') }];
   document.getElementById('tl-list').innerHTML = allEntries.map(h=>`
-    <div class="tl-item"><div class="tl-dot ${statusClass(h.status)}"></div>
+    <div class="tl-item"><div class="tl-dot ${h.type||statusClass(h.status)}"></div>
     <div><div class="tl-t">${h.status}</div><div class="tl-d">${fmtDateTime(h.changedAt)}</div></div></div>`).join('');
 
   switchTab('licensee');
@@ -996,9 +996,18 @@ async function setStatus(ref, newStatus){
 
 function saveNotes(){
   if(!selectedRef) return;
-  const n = getNotes(); n[selectedRef] = document.getElementById('notes-text').value;
+  const text = document.getElementById('notes-text').value.trim();
+  if(!text){ toast('Note is empty'); return; }
+  const n = getNotes(); n[selectedRef] = text;
   localStorage.setItem(NOTES_KEY, JSON.stringify(n));
-  toast('Notes saved ✓');
+  saveHistoryEntry(selectedRef, '📝 ' + text, 'note');
+  // Refresh timeline in panel
+  const history = getHistory();
+  const hs = history[selectedRef] || [];
+  document.getElementById('tl-list').innerHTML = hs.map(h=>`
+    <div class="tl-item"><div class="tl-dot ${h.type||statusClass(h.status)}"></div>
+    <div><div class="tl-t">${h.status}</div><div class="tl-d">${fmtDateTime(h.changedAt)}</div></div></div>`).join('');
+  toast('Note saved ✓');
 }
 
 // ── RMS ───────────────────────────────────────────────────
