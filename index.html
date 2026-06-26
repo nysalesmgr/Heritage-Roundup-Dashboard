@@ -815,12 +815,19 @@ function getNYData(ref){ return editableCache[ref] || {}; }
 
 function setNYData(ref, data){
   editableCache[ref] = { ...(editableCache[ref]||{}), ...data };
-  const payload = { ...editableCache[ref], ref_number: ref, property: currentProperty, updated_at: new Date().toISOString() };
+  // Only send known columns to Supabase
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','updated_at'];
+  const raw = { ...editableCache[ref], ref_number: ref, property: currentProperty, updated_at: new Date().toISOString() };
+  const payload = {};
+  allowed.forEach(k => { if(raw[k] !== undefined) payload[k] = raw[k]; });
+
   fetch(`${SUPABASE_URL}/rest/v1/editable_data`, {
     method: 'POST',
     headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify(payload)
-  }).catch(e => console.warn('Editable data save error:', e));
+  }).then(async r => {
+    if(!r.ok){ const t=await r.text(); console.error('editable_data save error:', r.status, t); }
+  }).catch(e => console.error('editable_data fetch error:', e));
 }
 
 async function loadEditableData(){
