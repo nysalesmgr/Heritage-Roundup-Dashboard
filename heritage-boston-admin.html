@@ -760,7 +760,7 @@ function renderRecent(){
 
   tbody.innerHTML = recent.map(a=>`
     <tr onclick="openPanel('${esc(a.ref_number)}')">
-      <td>${isNY ? `<span class="td-date">${fmtDate(a.created_at)}</span>` : `<span class="td-ref">${esc(a.ref_number||'—')}</span>`}</td>
+      <td>${isNY ? `<span class="td-date">${fmtDate(a.created_at)}</span>` : a._source==='Booking Engine' ? `<span class="td-ref">${esc(a.ref_number||'—')}</span>` : `<span class="td-date">${fmtDate(a.created_at)}</span>`}</td>
       <td><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
       <td><div class="td-unit">${esc(aptTitle(a))}${bedroomPill(a)}</div></td>
       <td><span class="td-date">${fmtDate(a.start_date)}</span></td>
@@ -854,7 +854,7 @@ function renderTable(){
       <th>Reference</th><th>Applicant</th><th>Unit / Type</th><th>Move-in</th><th>Submitted</th><th>Source</th><th>Status</th>`;
     tbody.innerHTML = filtered.map(a=>`
       <tr onclick="openPanel('${esc(a.ref_number)}')">
-        <td><span class="td-ref">${esc(a.ref_number||'—')}</span></td>
+        <td>${a._source==='Booking Engine' ? `<span class="td-ref">${esc(a.ref_number||'—')}</span>` : `<span class="td-date">${fmtDate(a.created_at)}</span>`}</td>
         <td><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
         <td><div class="td-unit">${esc(aptTitle(a))}${bedroomPill(a)}</div></td>
         <td><span class="td-date">${fmtDate(a.start_date)}</span></td>
@@ -1045,7 +1045,10 @@ function exportCSV(){
 }
 
 // ── HELPERS ───────────────────────────────────────────────
-function aptTitle(a){ return a.apartment ? a.apartment.split(' | ')[0] : (a.applicant_type || '—'); }
+function aptTitle(a){
+  if(a._source==='Domestic'||a._source==='International') return '—';
+  return a.apartment ? a.apartment.split(' | ')[0] : '—';
+}
 function bedroomPill(a){ return a.bedroom_choice ? ` <span style="font-size:10px;background:var(--navy-l);color:var(--navy);padding:1px 6px;border-radius:10px;font-weight:600;text-transform:capitalize">${a.bedroom_choice}</span>` : ''; }
 
 function statusClass(s){
