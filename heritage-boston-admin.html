@@ -277,9 +277,9 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
         </table></div>
         <div id="finish-line-section" style="display:none;margin-top:24px">
           <div class="sh"><span class="st">🏁 Finish Line — Agreement Issued</span><span class="sa" onclick="showView('applications')">View all →</span></div>
-          <div class="tc"><table>
-            <thead><tr><th>Applicant</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Season</th><th>Source</th></tr></thead>
-            <tbody id="finish-line-tbody"><tr class="loading-row"><td colspan="6">No agreements issued yet</td></tr></tbody>
+          <div class="tc tc-scroll"><table>
+            <thead><tr><th>R#</th><th>Applicant</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Agreement Date</th><th>Payment Due</th><th>Remarks</th></tr></thead>
+            <tbody id="finish-line-tbody"><tr class="loading-row"><td colspan="8">No agreements issued yet</td></tr></tbody>
           </table></div>
         </div>
       </div>
@@ -307,7 +307,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
               <option value="Agreement Issued">Agreement Issued</option>
               <option value="To Drop">To Drop</option>
               <option value="Drop Out ($500)">Drop Out ($500)</option>
-              <option value="Payment Received">Payment Received</option>
+              <option value="Payment Received/Finalized">Payment Received/Finalized</option>
               <option value="Approved">Approved</option>
               <option value="Rejected">Rejected</option>
               <option value="On Hold">On Hold</option>
@@ -697,19 +697,45 @@ function refreshAll(){
   if(document.getElementById('view-applications').classList.contains('on')) renderTable();
 }
 
+function getAgreementDate(ref){
+  const hs = getHistory()[ref] || [];
+  const entry = [...hs].reverse().find(h=>h.status==='Agreement Issued');
+  return entry ? entry.changedAt : null;
+}
+
+function getPaymentDueDate(ref){
+  const stored = getNYData(ref).payment_due;
+  if(stored) return stored;
+  const agrDate = getAgreementDate(ref);
+  if(!agrDate) return null;
+  const d = new Date(agrDate);
+  d.setDate(d.getDate()+2);
+  return d.toISOString().slice(0,10);
+}
+
+function flCell(ref, field, type){
+  const val = field==='payment_due' ? (getNYData(ref)[field] || getPaymentDueDate(ref) || '') : (getNYData(ref)[field]||'');
+  return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val?' empty':''}">${val||'—'}</span></td>`;
+}
+
 function renderFinishLine(){
   const tbody = document.getElementById('finish-line-tbody');
   const agreed = apps.filter(a=>a.status==='Agreement Issued');
-  if(!agreed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="6">No agreements issued yet</td></tr>`; return; }
+  if(!agreed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="8">No agreements issued yet</td></tr>`; return; }
   tbody.innerHTML = agreed.map(a=>{
     const d = getNYData(a.ref_number);
-    return `<tr onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">
-      <td><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
+    const agrDate = getAgreementDate(a.ref_number);
+    const agrDateStored = d.agr_date || (agrDate ? agrDate.slice(0,10) : '');
+    const payDue = d.payment_due || getPaymentDueDate(a.ref_number) || '';
+    return `<tr>
+      ${flCell(a.ref_number,'reservation_no','text')}
+      <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
       <td><span class="td-unit">${esc(d.unit||'—')}</span></td>
-      <td><span class="td-date">${d.move_in ? fmtDate(d.move_in) : '—'}</span></td>
-      <td><span class="td-date">${d.move_out ? fmtDate(d.move_out) : '—'}</span></td>
-      <td><span class="td-date">${d.season||'—'}</span></td>
-      <td>${srcBadge(a._source)}</td>
+      <td><span class="td-date">${d.move_in?fmtDate(d.move_in):'—'}</span></td>
+      <td><span class="td-date">${d.move_out?fmtDate(d.move_out):'—'}</span></td>
+      <td class="editable-cell" onclick="editCell(this,'${esc(a.ref_number)}','agr_date','date')"><span class="cell-val${!agrDateStored?' empty':''}">${agrDateStored?fmtDate(agrDateStored):'—'}</span></td>
+      <td class="editable-cell" onclick="editCell(this,'${esc(a.ref_number)}','payment_due','date')"><span class="cell-val${!payDue?' empty':''}">${payDue?fmtDate(payDue):'—'}</span></td>
+      ${flCell(a.ref_number,'remarks','text')}
     </tr>`;
   }).join('');
 }
@@ -849,7 +875,7 @@ function openPanel(ref){
     ${a.status!=='Agreement Issued'  ? `<button class="btn" style="background:var(--agr-bg);color:var(--agr)" onclick="setStatus('${esc(ref)}','Agreement Issued')">Agreement Issued</button>` : ''}
     ${a.status!=='To Drop'           ? `<button class="btn" style="background:var(--todrop-bg);color:var(--todrop)" onclick="setStatus('${esc(ref)}','To Drop')">To Drop</button>` : ''}
     ${a.status!=='Drop Out ($500)'   ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${esc(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
-    ${a.status!=='Payment Received'  ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received')">Payment Received</button>` : ''}
+    ${a.status!=='Payment Received/Finalized'  ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
     ${a.status!=='Pending Review'    ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
   ` : `
     ${a.status!=='Approved'      ? `<button class="btn btn-approve" onclick="setStatus('${esc(ref)}','Approved')">✓ Approve</button>` : ''}
@@ -977,6 +1003,7 @@ async function setStatus(ref, newStatus){
   saveHistoryEntry(ref, newStatus);
   refreshAll();
   openPanel(ref);
+  if(currentProperty==='newyork') renderFinishLine();
   toast('Status → ' + newStatus + ' ✓');
 }
 
@@ -1020,7 +1047,7 @@ function statusClass(s){
   if(s==='Agreement Issued')  return 'agreementissued';
   if(s==='To Drop')           return 'todrop';
   if(s==='Drop Out ($500)')   return 'dropout';
-  if(s==='Payment Received')  return 'paymentreceived';
+  if(s==='Payment Received/Finalized')  return 'paymentreceived';
   return 'pending';
 }
 function badge(s){
