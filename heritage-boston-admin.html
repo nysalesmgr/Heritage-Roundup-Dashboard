@@ -26,6 +26,7 @@
   --todrop:#c04f4a;--todrop-bg:#fde8e7;
   --dropout:#7f1d1d;--dropout-bg:#fee2e2;
   --payrcvd:#1a5c3a;--payrcvd-bg:#bbf7d0;
+  --revived:#6d28d9;--revived-bg:#ede9fe;
   --r:8px;
 }
 html,body{height:100%;font-family:'Inter',sans-serif;font-size:14px;color:var(--t1)}
@@ -133,6 +134,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
 .badge.todrop{background:var(--todrop-bg);color:var(--todrop)}
 .badge.dropout{background:var(--dropout-bg);color:var(--dropout)}
 .badge.paymentreceived{background:var(--payrcvd-bg);color:var(--payrcvd)}
+.badge.revived{background:var(--revived-bg);color:var(--revived)}
 .editable-cell{cursor:pointer;position:relative}
 .editable-cell:hover .cell-val{background:var(--navy-l);border-radius:4px;padding:2px 5px}
 .editable-cell input,.editable-cell select{width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:12px;font-family:'Inter',sans-serif;outline:none;background:#fff;color:var(--t1)}
@@ -143,6 +145,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
 .tl-dot.todrop{background:var(--todrop)}.tl-dot.dropout{background:var(--dropout)}
 .tl-dot.paymentreceived{background:var(--payrcvd)}
+.tl-dot.revived{background:var(--revived)}
 .badge.approved{background:var(--appr-bg);color:#065F46}
 .badge.rejected{background:var(--rej-bg);color:#991B1B}
 .badge.hold{background:var(--hold-bg);color:#3730A3}
@@ -308,6 +311,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
               <option value="To Drop">To Drop</option>
               <option value="Drop Out ($500)">Drop Out ($500)</option>
               <option value="Payment Received/Finalized">Payment Received/Finalized</option>
+              <option value="Revived">Revived</option>
               <option value="Approved">Approved</option>
               <option value="Rejected">Rejected</option>
               <option value="On Hold">On Hold</option>
@@ -875,6 +879,7 @@ function openPanel(ref){
     ${a.status!=='Agreement Issued'  ? `<button class="btn" style="background:var(--agr-bg);color:var(--agr)" onclick="setStatus('${esc(ref)}','Agreement Issued')">Agreement Issued</button>` : ''}
     ${a.status!=='To Drop'           ? `<button class="btn" style="background:var(--todrop-bg);color:var(--todrop)" onclick="setStatus('${esc(ref)}','To Drop')">To Drop</button>` : ''}
     ${a.status!=='Drop Out ($500)'   ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${esc(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
+    ${a.status!=='Revived'           ? `<button class="btn" style="background:var(--revived-bg);color:var(--revived)" onclick="setStatus('${esc(ref)}','Revived')">Revived</button>` : ''}
     ${a.status!=='Payment Received/Finalized'  ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
     ${a.status!=='Pending Review'    ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
   ` : `
@@ -1048,6 +1053,7 @@ function statusClass(s){
   if(s==='To Drop')           return 'todrop';
   if(s==='Drop Out ($500)')   return 'dropout';
   if(s==='Payment Received/Finalized')  return 'paymentreceived';
+  if(s==='Revived')             return 'revived';
   return 'pending';
 }
 function badge(s){
