@@ -834,7 +834,14 @@ function setNYData(ref, data){
 async function loadEditableData(){
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/editable_data?select=*`, { headers: SB_HEADERS });
-    if(res.ok){ const rows=await res.json(); editableCache={}; rows.forEach(r=>{ editableCache[r.ref_number]=r; }); }
+    if(res.ok){ 
+      const rows=await res.json(); 
+      console.log('loadEditableData:', rows.length, 'rows loaded', rows);
+      editableCache={}; 
+      rows.forEach(r=>{ editableCache[r.ref_number]=r; }); 
+    } else {
+      console.error('loadEditableData failed:', res.status, await res.text());
+    }
   }catch(e){ console.warn('Editable data fetch error:', e); }
 }
 
