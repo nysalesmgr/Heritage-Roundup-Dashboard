@@ -886,7 +886,12 @@ function editCell(td, ref, field, type){
   }
 }
 
-function nyCell(ref, field, type, fallback){ const val=getNYData(ref)[field]||(fallback||''); return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?val:'—'}</span></td>`; }
+function nyCell(ref, field, type, fallback){ 
+  const cached = getNYData(ref);
+  if(Object.keys(cached).length > 1) console.log('nyCell cache hit:', ref, field, '=', cached[field]);
+  const val=cached[field]||(fallback||''); 
+  return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?val:'—'}</span></td>`; 
+}
 
 // ── APPLICATIONS TABLE ────────────────────────────────────
 function renderTable(){
