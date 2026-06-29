@@ -714,6 +714,7 @@ function showView(v){
   document.getElementById('view-'+v).classList.add('on');
   document.getElementById('nav-'+v).classList.add('active');
   if(v==='applications') renderTable();
+  if(v==='overview'){ renderRecent(); renderFinishLine(); }
 }
 
 // ── REFRESH ───────────────────────────────────────────────
