@@ -215,11 +215,28 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="login-screen">
+<!-- STAFF SELECTOR (shown first) -->
+<div id="login-screen" style="position:fixed;inset:0;background:#1e2847;display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column">
   <div class="lc">
     <div class="l-brand">Heritage Collection</div>
     <div class="l-prop">Admin Dashboard</div>
+    <div class="sb-who">Who are you?</div>
+    <div class="staff-grid">
+      <button class="sb-btn" onclick="selectStaffForPin('Kyla')">Kyla</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Dianna')">Dianna</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Charlotte')">Charlotte</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Will')">Will</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Jonia')">Jonia</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Karen')">Karen</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN ENTRY (shown after name selected) -->
+<div id="staff-screen" style="display:none;position:fixed;inset:0;background:#1e2847;align-items:center;justify-content:center;z-index:998;flex-direction:column">
+  <div class="lc">
+    <div class="l-brand">Heritage Collection</div>
+    <div class="l-prop" id="pin-who-label">Enter your PIN</div>
     <div class="pin-dots">
       <div class="pd" id="pd0"></div><div class="pd" id="pd1"></div>
       <div class="pd" id="pd2"></div><div class="pd" id="pd3"></div>
@@ -231,23 +248,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle}
       <button class="pb zero" onclick="pinKey('0')">0</button><button class="pb del" onclick="pinDel()">⌫</button>
     </div>
     <div class="l-err" id="pin-err"></div>
-  </div>
-</div>
-
-<!-- STAFF SELECTOR -->
-<div id="staff-screen" style="display:none;position:fixed;inset:0;background:#1e2847;align-items:center;justify-content:center;z-index:998;flex-direction:column">
-  <div class="lc">
-    <div class="l-brand">Heritage Collection</div>
-    <div class="l-prop">Who are you?</div>
-    <div class="sb-who">Select your name to continue</div>
-    <div class="staff-grid">
-      <button class="sb-btn" onclick="selectStaff('Kyla')">Kyla</button>
-      <button class="sb-btn" onclick="selectStaff('Dianna')">Dianna</button>
-      <button class="sb-btn" onclick="selectStaff('Charlotte')">Charlotte</button>
-      <button class="sb-btn" onclick="selectStaff('Will')">Will</button>
-      <button class="sb-btn" onclick="selectStaff('Jonia')">Jonia</button>
-      <button class="sb-btn" onclick="selectStaff('Karen')">Karen</button>
-    </div>
+    <div style="margin-top:12px;font-size:11px;color:#3a4480;cursor:pointer" onclick="backToNames()">← Back</div>
   </div>
 </div>
 
@@ -453,8 +454,6 @@ const SUPABASE_URL = 'https://gldccgiydcbcgmbpgtnh.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsZGNjZ2l5ZGNiY2dtYnBndG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzOTUxNzMsImV4cCI6MjA5Nzk3MTE3M30.Kfz2RPOp4S15hXvwPOfpMZPnmuIoA211a_YsmQDtSck';
 const SB_HEADERS = {'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY};
 
-const PIN_KEY     = 'hc_admin_pin';
-const DEFAULT_PIN = '8181';
 
 // ── STATE ────────────────────────────────────────────────
 let apps = [];
@@ -473,14 +472,35 @@ document.addEventListener('DOMContentLoaded', () => {
 const STAFF_LIST = ['Kyla','Dianna','Charlotte','Will','Jonia','Karen'];
 
 // ── PIN ──────────────────────────────────────────────────
-function getPin(){ return localStorage.getItem(PIN_KEY) || DEFAULT_PIN; }
+function getPin(name){ return localStorage.getItem('hc_pin_'+name) || '8181'; }
+
+function selectStaffForPin(name){
+  currentStaff = name;
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('pin-who-label').textContent = name + "'s PIN";
+  document.getElementById('pin-err').textContent = '';
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('staff-screen').style.display = 'flex';
+}
+
+function backToNames(){
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('staff-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
 function pinKey(d){
   if(pinBuffer.length >= 4) return;
   pinBuffer += d; updateDots();
   if(pinBuffer.length === 4){
-    if(pinBuffer === getPin()){
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('staff-screen').style.display = 'flex';
+    if(pinBuffer === getPin(currentStaff)){
+      sessionStorage.setItem('hc_staff', currentStaff);
+      document.getElementById('staff-screen').style.display = 'none';
+      document.getElementById('app').classList.add('ready');
+      document.getElementById('staff-indicator').textContent = '👤 ' + currentStaff;
+      loadApps();
     } else {
       document.getElementById('pin-err').textContent = 'Incorrect PIN.';
       setTimeout(()=>{ pinBuffer=''; updateDots(); document.getElementById('pin-err').textContent=''; }, 800);
@@ -490,19 +510,10 @@ function pinKey(d){
 function pinDel(){ if(pinBuffer.length){ pinBuffer=pinBuffer.slice(0,-1); updateDots(); } }
 function updateDots(){ for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.toggle('on', i < pinBuffer.length); }
 document.addEventListener('keydown', e => {
-  if(document.getElementById('login-screen').style.display === 'none') return;
+  if(document.getElementById('staff-screen').style.display === 'none') return;
   if(/^\d$/.test(e.key)) pinKey(e.key);
   if(e.key === 'Backspace') pinDel();
 });
-
-function selectStaff(name){
-  currentStaff = name;
-  sessionStorage.setItem('hc_staff', name);
-  document.getElementById('staff-screen').style.display = 'none';
-  document.getElementById('app').classList.add('ready');
-  document.getElementById('staff-indicator').textContent = '👤 ' + name;
-  loadApps();
-}
 
 function logout(){
   document.getElementById('login-screen').style.display = 'flex';
@@ -511,8 +522,8 @@ function logout(){
   pinBuffer=''; currentStaff=''; updateDots(); closePanel();
 }
 function changePin(){
-  const np = prompt('Enter new 4-digit PIN:');
-  if(np && /^\d{4}$/.test(np)){ localStorage.setItem(PIN_KEY, np); toast('PIN updated ✓'); }
+  const np = prompt('Enter new 4-digit PIN for ' + currentStaff + ':');
+  if(np && /^\d{4}$/.test(np)){ localStorage.setItem('hc_pin_'+currentStaff, np); toast('PIN updated for ' + currentStaff + ' ✓'); }
   else if(np) alert('PIN must be exactly 4 digits.');
 }
 
