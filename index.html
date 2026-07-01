@@ -1389,7 +1389,7 @@ function openPanel(ref){
   `;
 
   // Build tabs dynamically
-  const tabNames = isBookingEngine ? ['licensee','booking','documents','notes'] : ['licensee','documents','notes'];
+  const tabNames = ['licensee','booking','documents','notes'];
   const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', notes: 'Notes & History' };
   document.getElementById('pan-tabs').innerHTML = tabNames.map((t,i)=>`<div class="ptab${i===0?' on':''}" onclick="switchTab('${t}')">${tabLabels[t]}</div>`).join('');
 
@@ -1428,6 +1428,7 @@ function openPanel(ref){
   }
 
   
+  const d = getNYData(a.ref_number);
   if(isBookingEngine){
     document.getElementById('t-apt').textContent      = a.apartment||'—';
     document.getElementById('t-movein').textContent   = fmtDate(a.start_date);
@@ -1437,6 +1438,15 @@ function openPanel(ref){
     document.getElementById('t-plan').textContent     = a.payment_plan||'—';
     document.getElementById('t-bedroom').textContent  = a.bedroom_choice ? (a.bedroom_choice.charAt(0).toUpperCase()+a.bedroom_choice.slice(1)+' Bedroom') : (parseInt(a.occupants)>=2&&(a.apartment||'').includes('Two')?'Both bedrooms':'N/A');
     document.getElementById('t-viewing').textContent  = a.viewing_preference||'—';
+  } else {
+    document.getElementById('t-apt').textContent      = d.unit||'—';
+    document.getElementById('t-movein').textContent   = d.move_in ? fmtDate(d.move_in) : '—';
+    document.getElementById('t-moveout').textContent  = d.move_out ? fmtDate(d.move_out) : '—';
+    document.getElementById('t-occ').textContent      = '—';
+    document.getElementById('t-rate').textContent     = d.monthly_rent||'—';
+    document.getElementById('t-plan').textContent     = '—';
+    document.getElementById('t-bedroom').textContent  = 'N/A';
+    document.getElementById('t-viewing').textContent  = '—';
   }
 
   // Documents tab
