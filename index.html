@@ -269,6 +269,9 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ni active" onclick="showView('overview')" id="nav-overview"><span class="ni-icon">⊞</span> Overview</div>
       <div class="ni" onclick="showView('applications')" id="nav-applications"><span class="ni-icon">☰</span> Applications<span class="ni-badge" id="pending-badge">0</span></div>
       <div class="ni" onclick="showView('renewals')" id="nav-renewals"><span class="ni-icon">🔄</span> Renewals</div>
+      <div class="ni" onclick="showView('drop')" id="nav-drop"><span class="ni-icon">✕</span> Drop</div>
+      <div class="ni" onclick="showView('completed')" id="nav-completed"><span class="ni-icon">✓</span> Completed</div>
+      <div class="ni" onclick="showView('blacklist')" id="nav-blacklist"><span class="ni-icon">🚫</span> Blacklist</div>
       <div class="sb-divider"></div>
       <div class="ni" onclick="loadApps(true)"><span class="ni-icon">↻</span> Refresh</div>
       <div class="ni" onclick="exportCSV()"><span class="ni-icon">↓</span> Export CSV</div>
@@ -404,6 +407,42 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       </div>
     </div>
 
+    <!-- DROP PAGE -->
+    <div class="view" id="view-drop">
+      <div class="ph"><div><div class="pt">Drop</div><div class="ps-sub">To Drop & Drop Out applications</div></div></div>
+      <div class="pc"><div class="tc tc-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Status</th></tr></thead>
+          <tbody id="drop-tbody"><tr class="loading-row"><td colspan="14">No dropped applications</td></tr></tbody>
+        </table>
+      </div></div>
+    </div>
+
+    <!-- COMPLETED PAGE -->
+    <div class="view" id="view-completed">
+      <div class="ph"><div><div class="pt">Completed</div><div class="ps-sub">Payment Received / Finalized</div></div></div>
+      <div class="pc"><div class="tc tc-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Status</th></tr></thead>
+          <tbody id="completed-tbody"><tr class="loading-row"><td colspan="14">No completed applications</td></tr></tbody>
+        </table>
+      </div></div>
+    </div>
+
+    <!-- BLACKLIST PAGE -->
+    <div class="view" id="view-blacklist">
+      <div class="ph">
+        <div><div class="pt">Blacklist</div><div class="ps-sub">Flagged names</div></div>
+        <button class="refresh-btn" onclick="openAddBlacklist()" style="background:#991B1B;color:#FFF;border-color:#991B1B">+ Add to Blacklist</button>
+      </div>
+      <div class="pc"><div class="tc">
+        <table>
+          <thead><tr><th>Name</th><th>Reason</th><th>Added By</th><th>Date Added</th><th></th></tr></thead>
+          <tbody id="blacklist-tbody"><tr class="loading-row"><td colspan="5">Loading…</td></tr></tbody>
+        </table>
+      </div></div>
+    </div>
+
   </main>
 </div>
 
@@ -423,6 +462,12 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div><div class="il-l">Monthly Rate</div><input id="aa-rate" class="notes-area" style="min-height:0;padding:7px 10px" placeholder="e.g. $3,200/mo"></div>
       <div><div class="il-l">Occupants</div><input id="aa-occ" class="notes-area" style="min-height:0;padding:7px 10px" placeholder="1"></div>
       <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Payment Plan</div><input id="aa-plan" class="notes-area" style="min-height:0;padding:7px 10px" placeholder="e.g. Monthly"></div>
+      <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Source</div>
+        <select id="aa-source" class="notes-area" style="min-height:0;padding:7px 10px">
+          <option value="International">International</option>
+          <option value="Domestic">Domestic</option>
+        </select>
+      </div>
     </div>
     <div class="l-err" id="aa-err" style="margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -431,6 +476,20 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     </div>
   </div>
 </div>
+<!-- BLACKLIST MODAL -->
+<div id="blacklist-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--card);border-radius:14px;padding:28px 32px;width:420px;max-width:95%">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin-bottom:20px">Add to Blacklist</div>
+    <div style="margin-bottom:12px"><div class="il-l">Full Name *</div><input id="bl-name" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="First and last name"></div>
+    <div style="margin-bottom:16px"><div class="il-l">Reason</div><input id="bl-reason" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="Reason for blacklisting"></div>
+    <div class="l-err" id="bl-err" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeAddBlacklist()" style="background:#F4F2EE;border:1px solid var(--border);border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">Cancel</button>
+      <button onclick="saveBlacklistEntry()" style="background:#991B1B;color:#FFF;border:none;border-radius:6px;padding:8px 20px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">Add to Blacklist</button>
+    </div>
+  </div>
+</div>
+
 <div id="renewal-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center">
   <div style="background:var(--card);border-radius:14px;padding:28px 32px;width:480px;max-width:95%">
     <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin-bottom:20px">Add Renewal</div>
@@ -652,6 +711,7 @@ async function loadApps(showMsg){
   apps = [];
   await loadEditableData();
   await loadRenewals();
+  await loadBlacklist();
   if(currentProperty === 'boston'){
     await loadBostonApps();
   } else {
@@ -769,6 +829,9 @@ function showView(v){
   if(v==='applications') renderTable();
   if(v==='overview'){ renderRecent(); renderFinishLine(); renderRenewals(); }
   if(v==='renewals'){ renderRenewalsPage(); }
+  if(v==='drop'){ renderDropPage(); }
+  if(v==='completed'){ renderCompletedPage(); }
+  if(v==='blacklist'){ renderBlacklistPage(); }
 }
 
 // ── REFRESH ───────────────────────────────────────────────
@@ -920,8 +983,109 @@ async function deleteRenewal(id){
   toast('Renewal deleted');
 }
 
+// ── BLACKLIST ─────────────────────────────────────────────
+let blacklistNames = [];
+
+async function loadBlacklist(){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist?order=created_at.desc`, { headers: SB_HEADERS });
+    if(res.ok) blacklistNames = await res.json();
+  }catch(e){ console.warn('Blacklist load error:', e); }
+}
+
+function isBlacklisted(firstName, lastName){
+  const full = ((firstName||'')+' '+(lastName||'')).trim().toLowerCase();
+  return blacklistNames.some(b=>(b.full_name||'').toLowerCase() === full);
+}
+
+function renderBlacklistPage(){
+  const tbody = document.getElementById('blacklist-tbody');
+  if(!tbody) return;
+  if(!blacklistNames.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="5">No blacklisted names</td></tr>`; return; }
+  tbody.innerHTML = blacklistNames.map(b=>`
+    <tr>
+      <td style="font-weight:600;color:var(--rej)">${esc(b.full_name||'—')}</td>
+      <td>${esc(b.reason||'—')}</td>
+      <td>${esc(b.added_by||'—')}</td>
+      <td>${fmtDateTime(b.created_at)}</td>
+      <td><span style="color:var(--rej);cursor:pointer;font-size:12px" onclick="deleteBlacklistEntry('${b.id}')">✕</span></td>
+    </tr>`).join('');
+}
+
+function openAddBlacklist(){ document.getElementById('bl-name').value=''; document.getElementById('bl-reason').value=''; document.getElementById('bl-err').textContent=''; document.getElementById('blacklist-modal').style.display='flex'; }
+function closeAddBlacklist(){ document.getElementById('blacklist-modal').style.display='none'; }
+
+async function saveBlacklistEntry(){
+  const name = document.getElementById('bl-name').value.trim();
+  if(!name){ document.getElementById('bl-err').textContent='Name is required.'; return; }
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist`, {
+    method:'POST', headers:{...SB_HEADERS,'Prefer':'return=representation'},
+    body: JSON.stringify({ full_name: name, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff })
+  });
+  if(res.ok){
+    const rows = await res.json();
+    blacklistNames.unshift(rows[0]);
+    renderBlacklistPage();
+    renderTable();
+    closeAddBlacklist();
+    toast('Added to blacklist ✓');
+  } else { document.getElementById('bl-err').textContent='Error saving.'; }
+}
+
+async function deleteBlacklistEntry(id){
+  if(!confirm('Remove from blacklist?')) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/blacklist?id=eq.${id}`, { method:'DELETE', headers: SB_HEADERS });
+  blacklistNames = blacklistNames.filter(b=>b.id!==id);
+  renderBlacklistPage();
+  renderTable();
+  toast('Removed from blacklist');
+}
+
+// ── DROP PAGE ─────────────────────────────────────────────
+function renderDropPage(){
+  const tbody = document.getElementById('drop-tbody');
+  if(!tbody) return;
+  const dropped = apps.filter(a=>['To Drop','Drop Out ($500)'].includes(a.status));
+  if(!dropped.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="14">No dropped applications</td></tr>`; return; }
+  tbody.innerHTML = dropped.map(a=>appRow(a)).join('');
+}
+
+// ── COMPLETED PAGE ────────────────────────────────────────
+function renderCompletedPage(){
+  const tbody = document.getElementById('completed-tbody');
+  if(!tbody) return;
+  const completed = apps.filter(a=>a.status==='Payment Received/Finalized');
+  if(!completed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="14">No completed applications</td></tr>`; return; }
+  tbody.innerHTML = completed.map(a=>appRow(a)).join('');
+}
+
+function appRow(a){
+  return `<tr>
+    <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
+    ${nyCell(a.ref_number,'season','season')}
+    <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer${isBlacklisted(a.first_name,a.last_name)?';background:var(--rej-bg)':''}">
+      <div class="td-name" style="${isBlacklisted(a.first_name,a.last_name)?'color:var(--rej)':''}">
+        ${isBlacklisted(a.first_name,a.last_name)?'🚫 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
+      </div>
+      <div class="td-email">${esc(a.email||'')}</div>
+    </td>
+    ${nyCell(a.ref_number,'lead_source','text')}
+    ${nyCell(a.ref_number,'unit','text', a._source==='Booking Engine' ? aptTitle(a) : '')}
+    ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : '')}
+    ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : '')}
+    ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
+    ${nyCell(a.ref_number,'incentives','text')}
+    ${nyCell(a.ref_number,'vmu','date')}
+    ${nyCell(a.ref_number,'ipt','date')}
+    ${nyCell(a.ref_number,'student_status','student')}
+    ${nyCell(a.ref_number,'prev_accommodation','text')}
+    <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
+  </tr>`;
+}
+
 function openAddApplication(){
   ['aa-first','aa-last','aa-email','aa-phone','aa-college','aa-apt','aa-movein','aa-moveout','aa-rate','aa-occ','aa-plan'].forEach(id=>{ document.getElementById(id).value=''; });
+  document.getElementById('aa-source').value='International';
   document.getElementById('aa-err').textContent='';
   document.getElementById('add-app-modal').style.display='flex';
 }
@@ -962,6 +1126,8 @@ async function saveNewApplication(){
     body: JSON.stringify(payload)
   });
   if(res.ok){
+    const source = document.getElementById('aa-source').value;
+    setNYData(ref, { lead_source: source });
     closeAddApplication();
     await loadApps(false);
     toast('Application added ✓ — Ref: ' + ref);
@@ -1170,7 +1336,9 @@ function renderTable(){
   const srt = document.getElementById('sort-select').value;
   const tbody = document.getElementById('apps-tbody');
 
+  const EXCLUDED_STATUSES = ['To Drop','Drop Out ($500)','Payment Received/Finalized'];
   let filtered = apps.filter(a=>{
+    if(EXCLUDED_STATUSES.includes(a.status)) return false;
     const name = ((a.first_name||'') + ' ' + (a.last_name||'')).toLowerCase();
     const matchQ = !q || name.includes(q) || (a.email||'').toLowerCase().includes(q) || (a.ref_number||'').toLowerCase().includes(q);
     const matchS = sf==='all' || a.status===sf;
@@ -1190,23 +1358,7 @@ function renderTable(){
     <th>Date of Submission</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
     <th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Status</th>`;
 
-  tbody.innerHTML = filtered.map(a=>`
-    <tr>
-      <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
-      ${nyCell(a.ref_number,'season','season')}
-      <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
-      ${nyCell(a.ref_number,'lead_source','text')}
-      ${nyCell(a.ref_number,'unit','text', a._source==='Booking Engine' ? aptTitle(a) : '')}
-      ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : '')}
-      ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : '')}
-      ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
-      ${nyCell(a.ref_number,'incentives','text')}
-      ${nyCell(a.ref_number,'vmu','date')}
-      ${nyCell(a.ref_number,'ipt','date')}
-      ${nyCell(a.ref_number,'student_status','student')}
-      ${nyCell(a.ref_number,'prev_accommodation','text')}
-      <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
-    </tr>`).join('');
+  tbody.innerHTML = filtered.map(a=>appRow(a)).join('');
 }
 
 // ── DETAIL PANEL ──────────────────────────────────────────
