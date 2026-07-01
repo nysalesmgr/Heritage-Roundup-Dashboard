@@ -719,7 +719,7 @@ async function loadApps(showMsg){
 async function loadBostonApps(){
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/applications?select=*&order=created_at.desc', { headers: SB_HEADERS });
-    if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push({...r,_source:'Booking Engine',_property:'boston'})); }
+    if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push({...r,_source:r.source_override||'Booking Engine',_property:'boston'})); }
   } catch(e){ console.error('Supabase error:', e); }
 
   try {
