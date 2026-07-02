@@ -1007,7 +1007,7 @@ function renderBlacklistPage(){
   tbody.innerHTML = blacklistNames.map(b=>`
     <tr>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','full_name')"><span class="cell-val" style="font-weight:600;color:var(--rej)">${esc(b.full_name||'—')}</span></td>
-      <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','reason')"><span class="cell-val">${esc(b.reason||'—')}</span></td>
+      <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','reason')"><span class="cell-val" style="white-space:normal;word-break:break-word">${esc(b.reason||'—')}</span></td>
       <td>${esc(b.added_by||'—')}</td>
       <td>${fmtDateTime(b.created_at)}</td>
       <td><span style="color:var(--rej);cursor:pointer;font-size:12px" onclick="deleteBlacklistEntry('${b.id}')">✕</span></td>
