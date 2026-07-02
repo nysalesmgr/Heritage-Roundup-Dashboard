@@ -524,7 +524,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
         <div class="igrid">
           <div><div class="il-l">First Name</div><div class="il-v" id="t-first">—</div></div>
           <div><div class="il-l">Last Name</div><div class="il-v" id="t-last">—</div></div>
-          <div><div class="il-l">Email</div><div class="il-v" id="t-email">—</div></div>
+          <div><div class="il-l">Email</div><div class="il-v" id="t-email" style="cursor:pointer" onclick="editPanelField('t-email','email',this)">—</div></div>
           <div><div class="il-l">Phone / WhatsApp</div><div class="il-v" id="t-phone">—</div></div>
           <div class="igrid full" style="grid-column:1/-1"><div class="il-l" id="t-college-label">University / College</div><div class="il-v" id="t-college">—</div></div>
           <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Source</div><div class="il-v" id="t-source">—</div></div>
@@ -1579,7 +1579,32 @@ async function saveNotes(){
   toast('Note saved ✓');
 }
 
-// ── RMS ───────────────────────────────────────────────────
+// ── PANEL FIELD EDITING ───────────────────────────────────
+function editPanelField(elId, field, el){
+  const a = apps.find(x=>x.ref_number===selectedRef);
+  if(!a) return;
+  const cur = a[field]||'';
+  const input = document.createElement('input');
+  input.type='text'; input.value=cur;
+  input.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
+  el.innerHTML=''; el.appendChild(input); input.focus();
+  const save = async () => {
+    const val = input.value.trim();
+    a[field] = val;
+    el.innerHTML = val ? `<a href="mailto:${esc(val)}">${esc(val)}</a>` : '—';
+    // Save to Supabase
+    const table = a._source==='Booking Engine' ? 'applications' : 'formsite_submissions';
+    const key = a._source==='Booking Engine' ? 'ref_number' : 'ref_number';
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(selectedRef)}`, {
+      method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
+      body: JSON.stringify({[field]: val})
+    });
+    await insertHistory(selectedRef, 'field', `✏️ Email: "${cur}" → "${val}"`);
+    toast('Email updated ✓');
+  };
+  input.onblur=save;
+  input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?`<a href="mailto:${esc(cur)}">${esc(cur)}</a>`:'—'; } };
+}
 function openRmsModal(){ document.getElementById('rms-modal').classList.add('on'); }
 function closeRmsModal(){ document.getElementById('rms-modal').classList.remove('on'); }
 
