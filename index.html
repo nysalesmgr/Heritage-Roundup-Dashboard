@@ -1574,6 +1574,7 @@ function saveRemarks(){
   if(!selectedRef) return;
   const text = document.getElementById('remarks-text').value;
   setNYData(selectedRef, { remarks: text });
+  document.getElementById('remarks-text').value = '';
   toast('Remarks saved ✓');
 }
 
