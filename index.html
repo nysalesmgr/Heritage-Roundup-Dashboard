@@ -1575,6 +1575,7 @@ async function saveNotes(){
       <div><div class="tl-t" style="white-space:pre-wrap">${esc(h.content)}</div>
       <div class="tl-d">${fmtDateTime(h.created_at)} · <strong>${esc(h.staff_name)}</strong></div></div>
     </div>`).join('');
+  document.getElementById('notes-text').value = '';
   toast('Note saved ✓');
 }
 
