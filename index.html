@@ -571,6 +571,14 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div id="tab-documents" class="ptc">
       <div class="isec"><div class="isec-title">Uploaded Documents</div><div id="t-docs-list"></div></div>
     </div>
+    <div id="tab-remarks" class="ptc">
+      <div class="isec">
+        <div class="isec-title">Remarks</div>
+        <textarea class="notes-area" id="remarks-text" placeholder="Add remarks…" style="min-height:120px"></textarea>
+        <button class="notes-save-btn" onclick="saveRemarks()">Save Remarks</button>
+      </div>
+    </div>
+
     <div id="tab-notes" class="ptc">
       <div class="isec">
         <div class="isec-title">Staff Notes</div>
@@ -1402,8 +1410,8 @@ function openPanel(ref){
   `;
 
   // Build tabs dynamically
-  const tabNames = ['licensee','booking','documents','notes'];
-  const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', notes: 'Notes & History' };
+  const tabNames = ['licensee','booking','documents','remarks','notes'];
+  const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', remarks: 'Remarks', notes: 'Notes & History' };
   document.getElementById('pan-tabs').innerHTML = tabNames.map((t,i)=>`<div class="ptab${i===0?' on':''}" onclick="switchTab('${t}')">${tabLabels[t]}</div>`).join('');
 
   // Licensee tab
@@ -1478,7 +1486,8 @@ function openPanel(ref){
   }
   document.getElementById('t-docs-list').innerHTML = docHtml;
 
-  // Notes & History — load from Supabase
+  // Remarks tab
+  document.getElementById('remarks-text').value = getNYData(a.ref_number).remarks || '';
   document.getElementById('notes-text').value = 'Loading…';
   document.getElementById('tl-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
 
@@ -1561,8 +1570,14 @@ async function setStatus(ref, newStatus){
   toast('Status → ' + newStatus + ' ✓');
 }
 
-async function saveNotes(){
+function saveRemarks(){
   if(!selectedRef) return;
+  const text = document.getElementById('remarks-text').value;
+  setNYData(selectedRef, { remarks: text });
+  toast('Remarks saved ✓');
+}
+
+async function saveNotes(){  if(!selectedRef) return;
   const text = document.getElementById('notes-text').value.trim();
   if(!text){ toast('Note is empty'); return; }
   await insertNote(selectedRef, text);
