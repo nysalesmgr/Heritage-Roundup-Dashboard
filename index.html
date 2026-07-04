@@ -574,9 +574,10 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div id="tab-remarks" class="ptc">
       <div class="isec">
         <div class="isec-title">Remarks</div>
-        <textarea class="notes-area" id="remarks-text" placeholder="Add remarks…" style="min-height:120px"></textarea>
-        <button class="notes-save-btn" onclick="saveRemarks()">Save Remarks</button>
+        <textarea class="notes-area" id="remarks-text" placeholder="Add a remark…" style="min-height:100px"></textarea>
+        <button class="notes-save-btn" onclick="saveRemarks()">Save Remark</button>
       </div>
+      <div class="isec"><div class="isec-title">Remarks History</div><div id="remarks-list"></div></div>
     </div>
 
     <div id="tab-notes" class="ptc">
@@ -1487,7 +1488,8 @@ function openPanel(ref){
   document.getElementById('t-docs-list').innerHTML = docHtml;
 
   // Remarks tab
-  document.getElementById('remarks-text').value = getNYData(a.ref_number).remarks || '';
+  document.getElementById('remarks-text').value = '';
+  document.getElementById('remarks-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
   document.getElementById('notes-text').value = 'Loading…';
   document.getElementById('tl-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
 
@@ -1498,6 +1500,7 @@ function openPanel(ref){
   // Async load
   Promise.all([fetchNotes(ref), fetchHistory(ref)]).then(([noteText, histEntries])=>{
     document.getElementById('notes-text').value = noteText;
+    renderRemarksList(histEntries);
     const tl = document.getElementById('tl-list');
     if(!histEntries.length){
       tl.innerHTML = `<div class="tl-item"><div class="tl-dot pending"></div><div><div class="tl-t">Pending Review</div><div class="tl-d">${fmtDateTime(a.created_at)}</div></div></div>`;
@@ -1570,12 +1573,29 @@ async function setStatus(ref, newStatus){
   toast('Status → ' + newStatus + ' ✓');
 }
 
-function saveRemarks(){
+async function saveRemarks(){
   if(!selectedRef) return;
-  const text = document.getElementById('remarks-text').value;
-  setNYData(selectedRef, { remarks: text });
+  const text = document.getElementById('remarks-text').value.trim();
+  if(!text){ toast('Remark is empty'); return; }
+  await insertHistory(selectedRef, 'remark', '💬 ' + text);
   document.getElementById('remarks-text').value = '';
-  toast('Remarks saved ✓');
+  // Refresh remarks list
+  const histEntries = await fetchHistory(selectedRef);
+  renderRemarksList(histEntries);
+  toast('Remark saved ✓');
+}
+
+function renderRemarksList(histEntries){
+  const list = document.getElementById('remarks-list');
+  if(!list) return;
+  const remarks = histEntries.filter(h=>h.entry_type==='remark');
+  if(!remarks.length){ list.innerHTML='<div style="color:var(--t3);font-size:12px">No remarks yet.</div>'; return; }
+  list.innerHTML = remarks.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot note"></div>
+      <div><div class="tl-t" style="white-space:pre-wrap">${esc(h.content.replace(/^💬 /,''))}</div>
+      <div class="tl-d">${fmtDateTime(h.created_at)} · <strong>${esc(h.staff_name)}</strong></div></div>
+    </div>`).join('');
 }
 
 async function saveNotes(){  if(!selectedRef) return;
