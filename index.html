@@ -1055,11 +1055,11 @@ function editBlacklistRisk(td, id, cur){
     const val = select.value;
     const row = blacklistNames.find(b=>b.id===id);
     if(row) row.risk_level = val;
-    td.innerHTML = `<span class="badge ${val==='High Risk'?'todrop':'hold'}">${val}</span>`;
     fetch(`${SUPABASE_URL}/rest/v1/blacklist?id=eq.${id}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body: JSON.stringify({risk_level: val})
     }).catch(e=>console.warn('Blacklist update error:',e));
+    renderBlacklistPage();
   };
 }
 
