@@ -1015,8 +1015,12 @@ function isBlacklisted(firstName, lastName, email){
 function renderBlacklistPage(){
   const tbody = document.getElementById('blacklist-tbody');
   if(!tbody) return;
-  if(!blacklistNames.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="5">No blacklisted names</td></tr>`; return; }
-  tbody.innerHTML = blacklistNames.map(b=>`
+  if(!blacklistNames.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="7">No blacklisted names</td></tr>`; return; }
+
+  const highRisk = blacklistNames.filter(b=>(b.risk_level||'Low Risk')==='High Risk');
+  const lowRisk  = blacklistNames.filter(b=>(b.risk_level||'Low Risk')==='Low Risk');
+
+  const renderRow = b => `
     <tr>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','full_name')"><span class="cell-val" style="font-weight:600;color:var(--rej)">${esc(b.full_name||'—')}</span></td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','email')"><span class="cell-val">${esc(b.email||'—')}</span></td>
@@ -1027,7 +1031,18 @@ function renderBlacklistPage(){
       <td>${esc(b.added_by||'—')}</td>
       <td>${fmtDateTime(b.created_at)}</td>
       <td><span style="color:var(--rej);cursor:pointer;font-size:12px" onclick="deleteBlacklistEntry('${b.id}')">✕</span></td>
-    </tr>`).join('');
+    </tr>`;
+
+  let html = '';
+  if(highRisk.length){
+    html += `<tr style="background:#fee2e2"><td colspan="7" style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dropout);padding:6px 14px">⚠ High Risk</td></tr>`;
+    html += highRisk.map(renderRow).join('');
+  }
+  if(lowRisk.length){
+    html += `<tr style="background:#e8eaf4"><td colspan="7" style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--navy);padding:6px 14px">Low Risk</td></tr>`;
+    html += lowRisk.map(renderRow).join('');
+  }
+  tbody.innerHTML = html;
 }
 
 function editBlacklistRisk(td, id, cur){
