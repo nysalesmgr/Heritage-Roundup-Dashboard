@@ -999,7 +999,7 @@ let blacklistNames = [];
 
 async function loadBlacklist(){
   try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist?order=created_at.desc`, { headers: SB_HEADERS });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist?property=eq.${currentProperty}&order=created_at.desc`, { headers: SB_HEADERS });
     if(res.ok) blacklistNames = await res.json();
   }catch(e){ console.warn('Blacklist load error:', e); }
 }
@@ -1095,7 +1095,7 @@ async function saveBlacklistEntry(){
   if(!name){ document.getElementById('bl-err').textContent='Name is required.'; return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist`, {
     method:'POST', headers:{...SB_HEADERS,'Prefer':'return=representation'},
-    body: JSON.stringify({ unit: document.getElementById('bl-unit').value.trim()||null, full_name: name, email: document.getElementById('bl-email').value.trim()||null, risk_level: document.getElementById('bl-risk').value, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff })
+    body: JSON.stringify({ unit: document.getElementById('bl-unit').value.trim()||null, full_name: name, email: document.getElementById('bl-email').value.trim()||null, risk_level: document.getElementById('bl-risk').value, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff, property: currentProperty })
   });
   if(res.ok){
     const rows = await res.json();
