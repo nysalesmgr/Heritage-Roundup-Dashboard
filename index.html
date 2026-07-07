@@ -437,7 +437,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       </div>
       <div class="pc"><div class="tc">
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Reason</th><th>Added By</th><th>Date Added</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Risk Level</th><th>Reason</th><th>Added By</th><th>Date Added</th><th></th></tr></thead>
           <tbody id="blacklist-tbody"><tr class="loading-row"><td colspan="5">Loading…</td></tr></tbody>
         </table>
       </div></div>
@@ -476,6 +476,12 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin-bottom:20px">Add to Blacklist</div>
     <div style="margin-bottom:12px"><div class="il-l">Full Name *</div><input id="bl-name" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="First and last name"></div>
     <div style="margin-bottom:12px"><div class="il-l">Email</div><input id="bl-email" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="Email address (optional)"></div>
+    <div style="margin-bottom:12px"><div class="il-l">Risk Level</div>
+      <select id="bl-risk" class="notes-area" style="min-height:0;padding:7px 10px;width:100%">
+        <option value="Low Risk">Low Risk</option>
+        <option value="High Risk">High Risk</option>
+      </select>
+    </div>
     <div style="margin-bottom:16px"><div class="il-l">Reason</div><input id="bl-reason" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="Reason for blacklisting"></div>
     <div class="l-err" id="bl-err" style="margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -1014,6 +1020,9 @@ function renderBlacklistPage(){
     <tr>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','full_name')"><span class="cell-val" style="font-weight:600;color:var(--rej)">${esc(b.full_name||'—')}</span></td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','email')"><span class="cell-val">${esc(b.email||'—')}</span></td>
+      <td class="editable-cell" onclick="editBlacklistRisk(this,'${b.id}','${b.risk_level||'Low Risk'}')">
+        <span class="badge ${b.risk_level==='High Risk'?'todrop':'hold'}">${b.risk_level||'Low Risk'}</span>
+      </td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','reason')"><span class="cell-val" style="white-space:normal;word-break:break-word">${esc(b.reason||'—')}</span></td>
       <td>${esc(b.added_by||'—')}</td>
       <td>${fmtDateTime(b.created_at)}</td>
@@ -1021,7 +1030,23 @@ function renderBlacklistPage(){
     </tr>`).join('');
 }
 
-function editBlacklistCell(td, id, field){
+function editBlacklistRisk(td, id, cur){
+  const select = document.createElement('select');
+  ['Low Risk','High Risk'].forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; select.appendChild(op); });
+  select.style.cssText='border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:12px;font-family:Inter,sans-serif;outline:none';
+  select.onclick = e => e.stopPropagation();
+  td.innerHTML=''; td.appendChild(select); select.focus();
+  select.onchange = () => {
+    const val = select.value;
+    const row = blacklistNames.find(b=>b.id===id);
+    if(row) row.risk_level = val;
+    td.innerHTML = `<span class="badge ${val==='High Risk'?'todrop':'hold'}">${val}</span>`;
+    fetch(`${SUPABASE_URL}/rest/v1/blacklist?id=eq.${id}`, {
+      method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
+      body: JSON.stringify({risk_level: val})
+    }).catch(e=>console.warn('Blacklist update error:',e));
+  };
+}
   const row = blacklistNames.find(b=>b.id===id);
   const cur = row ? (row[field]||'') : '';
   const input = document.createElement('input');
@@ -1043,7 +1068,7 @@ function editBlacklistCell(td, id, field){
   input.onkeydown = e => { if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val"${field==='full_name'?' style="font-weight:600;color:var(--rej)"':''}>${esc(cur||'—')}</span>`; } };
 }
 
-function openAddBlacklist(){ document.getElementById('bl-name').value=''; document.getElementById('bl-email').value=''; document.getElementById('bl-reason').value=''; document.getElementById('bl-err').textContent=''; document.getElementById('blacklist-modal').style.display='flex'; }
+function openAddBlacklist(){ document.getElementById('bl-name').value=''; document.getElementById('bl-email').value=''; document.getElementById('bl-risk').value='Low Risk'; document.getElementById('bl-reason').value=''; document.getElementById('bl-err').textContent=''; document.getElementById('blacklist-modal').style.display='flex'; }
 function closeAddBlacklist(){ document.getElementById('blacklist-modal').style.display='none'; }
 
 async function saveBlacklistEntry(){
@@ -1051,7 +1076,7 @@ async function saveBlacklistEntry(){
   if(!name){ document.getElementById('bl-err').textContent='Name is required.'; return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist`, {
     method:'POST', headers:{...SB_HEADERS,'Prefer':'return=representation'},
-    body: JSON.stringify({ full_name: name, email: document.getElementById('bl-email').value.trim()||null, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff })
+    body: JSON.stringify({ full_name: name, email: document.getElementById('bl-email').value.trim()||null, risk_level: document.getElementById('bl-risk').value, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff })
   });
   if(res.ok){
     const rows = await res.json();
