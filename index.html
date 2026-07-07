@@ -1047,6 +1047,8 @@ function editBlacklistRisk(td, id, cur){
     }).catch(e=>console.warn('Blacklist update error:',e));
   };
 }
+
+function editBlacklistCell(td, id, field){
   const row = blacklistNames.find(b=>b.id===id);
   const cur = row ? (row[field]||'') : '';
   const input = document.createElement('input');
