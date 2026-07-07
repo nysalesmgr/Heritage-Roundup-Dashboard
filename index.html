@@ -222,7 +222,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="login-screen" style="position:fixed;inset:0;background:#1e2847;display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column">
   <div class="lc">
     <div class="l-brand">Heritage Collection</div>
-    <div class="l-prop">Admin Dashboard</div>
+    <div class="l-prop">Round Up Summary Dashboard</div>
     <div class="sb-who">Who are you?</div>
     <div class="staff-grid">
       <button class="sb-btn" onclick="selectStaffForPin('Kyla')">Kyla</button>
@@ -437,7 +437,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       </div>
       <div class="pc"><div class="tc">
         <table>
-          <thead><tr><th>Name</th><th>Reason</th><th>Added By</th><th>Date Added</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Reason</th><th>Added By</th><th>Date Added</th><th></th></tr></thead>
           <tbody id="blacklist-tbody"><tr class="loading-row"><td colspan="5">Loading…</td></tr></tbody>
         </table>
       </div></div>
@@ -475,6 +475,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div style="background:var(--card);border-radius:14px;padding:28px 32px;width:420px;max-width:95%">
     <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin-bottom:20px">Add to Blacklist</div>
     <div style="margin-bottom:12px"><div class="il-l">Full Name *</div><input id="bl-name" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="First and last name"></div>
+    <div style="margin-bottom:12px"><div class="il-l">Email</div><input id="bl-email" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="Email address (optional)"></div>
     <div style="margin-bottom:16px"><div class="il-l">Reason</div><input id="bl-reason" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" placeholder="Reason for blacklisting"></div>
     <div class="l-err" id="bl-err" style="margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -996,9 +997,13 @@ async function loadBlacklist(){
   }catch(e){ console.warn('Blacklist load error:', e); }
 }
 
-function isBlacklisted(firstName, lastName){
+function isBlacklisted(firstName, lastName, email){
   const full = ((firstName||'')+' '+(lastName||'')).trim().toLowerCase();
-  return blacklistNames.some(b=>(b.full_name||'').toLowerCase() === full);
+  const em = (email||'').toLowerCase();
+  return blacklistNames.some(b=>
+    (b.full_name||'').toLowerCase() === full ||
+    (em && b.email && b.email.toLowerCase() === em)
+  );
 }
 
 function renderBlacklistPage(){
@@ -1008,6 +1013,7 @@ function renderBlacklistPage(){
   tbody.innerHTML = blacklistNames.map(b=>`
     <tr>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','full_name')"><span class="cell-val" style="font-weight:600;color:var(--rej)">${esc(b.full_name||'—')}</span></td>
+      <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','email')"><span class="cell-val">${esc(b.email||'—')}</span></td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','reason')"><span class="cell-val" style="white-space:normal;word-break:break-word">${esc(b.reason||'—')}</span></td>
       <td>${esc(b.added_by||'—')}</td>
       <td>${fmtDateTime(b.created_at)}</td>
@@ -1037,7 +1043,7 @@ function editBlacklistCell(td, id, field){
   input.onkeydown = e => { if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val"${field==='full_name'?' style="font-weight:600;color:var(--rej)"':''}>${esc(cur||'—')}</span>`; } };
 }
 
-function openAddBlacklist(){ document.getElementById('bl-name').value=''; document.getElementById('bl-reason').value=''; document.getElementById('bl-err').textContent=''; document.getElementById('blacklist-modal').style.display='flex'; }
+function openAddBlacklist(){ document.getElementById('bl-name').value=''; document.getElementById('bl-email').value=''; document.getElementById('bl-reason').value=''; document.getElementById('bl-err').textContent=''; document.getElementById('blacklist-modal').style.display='flex'; }
 function closeAddBlacklist(){ document.getElementById('blacklist-modal').style.display='none'; }
 
 async function saveBlacklistEntry(){
@@ -1045,7 +1051,7 @@ async function saveBlacklistEntry(){
   if(!name){ document.getElementById('bl-err').textContent='Name is required.'; return; }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist`, {
     method:'POST', headers:{...SB_HEADERS,'Prefer':'return=representation'},
-    body: JSON.stringify({ full_name: name, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff })
+    body: JSON.stringify({ full_name: name, email: document.getElementById('bl-email').value.trim()||null, reason: document.getElementById('bl-reason').value.trim(), added_by: currentStaff })
   });
   if(res.ok){
     const rows = await res.json();
@@ -1089,9 +1095,9 @@ function appRow(a){
     <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
     <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
     ${nyCell(a.ref_number,'season','season')}
-    <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer${isBlacklisted(a.first_name,a.last_name)?';background:var(--rej-bg)':''}">
-      <div class="td-name" style="${isBlacklisted(a.first_name,a.last_name)?'color:var(--rej)':''}">
-        ${isBlacklisted(a.first_name,a.last_name)?'🚫 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
+    <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer${isBlacklisted(a.first_name,a.last_name,a.email)?';background:var(--rej-bg)':''}">
+      <div class="td-name" style="${isBlacklisted(a.first_name,a.last_name,a.email)?'color:var(--rej)':''}">
+        ${isBlacklisted(a.first_name,a.last_name,a.email)?'🚫 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
       </div>
       <div class="td-email">${esc(a.email||'')}</div>
     </td>
