@@ -782,6 +782,9 @@ function normalizeSupabaseFormsite(row){
     course:         raw['32'] || '',
     employer:       raw['62'] || '',
     referral:       raw['54'] || '',
+    formsite_movein:  raw['82'] || '',
+    formsite_moveout: raw['83'] || '',
+    formsite_source:  raw['26'] || '',
     passport_number: raw['22'] || '',
     passport_expiry: raw['23'] || '',
     license_url:    raw['65'] || '',
@@ -1145,10 +1148,10 @@ function appRow(a){
       </div>
       <div class="td-email">${esc(a.email||'')}</div>
     </td>
-    ${nyCell(a.ref_number,'lead_source','text')}
+    ${nyCell(a.ref_number,'lead_source','text', a.formsite_source||'')}
     ${nyCell(a.ref_number,'unit','text', a._source==='Booking Engine' ? aptTitle(a) : '')}
-    ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : '')}
-    ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : '')}
+    ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : (a.formsite_movein||''))}
+    ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : (a.formsite_moveout||''))}
     ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
     ${nyCell(a.ref_number,'incentives','text')}
     ${nyCell(a.ref_number,'vmu','date')}
