@@ -984,6 +984,18 @@ function editRenewalCell(td, id, field, type){
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body: JSON.stringify({[field]:val})
     }).catch(e=>console.warn('Renewal update error:',e));
+    // Auto-populate payment_due as T+2 when agr_date is set
+    if(field==='agr_date' && val){
+      const due = new Date(val); due.setDate(due.getDate()+2);
+      const dueStr = due.toISOString().slice(0,10);
+      if(row && !row.payment_due){
+        row.payment_due = dueStr;
+        fetch(`${SUPABASE_URL}/rest/v1/renewals?id=eq.${id}`, {
+          method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
+          body: JSON.stringify({payment_due: dueStr})
+        }).then(()=>{ renderRenewals(); renderRenewalsPage(); });
+      }
+    }
   };
   input.onblur = save;
   input.onkeydown = e => { if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val${!cur?' empty':''}">${cur?(type==='date'?fmtDate(cur):cur):'—'}</span>`; } };
