@@ -1487,6 +1487,7 @@ function openPanel(ref){
     ${a.status!=='Renewal' ? `<button class="btn" style="background:var(--renewal-bg);color:var(--renewal)" onclick="setStatus('${esc(ref)}','Renewal')">Renewal</button>` : ''}
     ${a.status!=='Pending Review'           ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
     <button class="btn btn-rms" onclick="openRmsModal()">⬡ Create in RMS Cloud</button>
+    <button class="btn" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE" onclick="showLinkStatusPopup('${esc(ref)}', '${esc(a.status)}')">🔗 Link Reservation</button>
   `;
 
   // Build tabs dynamically
@@ -1650,9 +1651,6 @@ async function setStatus(ref, newStatus){
   renderFinishLine();
   renderRenewals();
   toast('Status → ' + newStatus + ' ✓');
-
-  // Show link popup — offer to apply same status to other applicants
-  showLinkStatusPopup(ref, newStatus);
 }
 
 function showLinkStatusPopup(ref, newStatus){
@@ -1666,7 +1664,7 @@ function showLinkStatusPopup(ref, newStatus){
     </label>`).join('');
 
   document.getElementById('link-status-list').innerHTML = list;
-  document.getElementById('link-status-label').textContent = `Apply "${newStatus}" to:`;
+  document.getElementById('link-status-label').textContent = `Tick applicants to apply the same status: "${newStatus}"`;
   document.getElementById('link-status-modal').dataset.status = newStatus;
   document.getElementById('link-status-modal').style.display = 'flex';
 }
