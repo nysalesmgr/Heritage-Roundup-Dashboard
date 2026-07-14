@@ -1680,7 +1680,13 @@ function getLinkedRefs(ref){
 function isLinked(ref){ return getLinkedRefs(ref).length > 0; }
 
 function showLinkStatusPopup(ref, currentStatus){
-  const others = apps.filter(a => a.ref_number !== ref && a._property === currentProperty);
+  const EXCLUDED = ['To Drop','Drop Out ($500)','Payment Received/Finalized'];
+  const others = apps.filter(a => 
+    a.ref_number !== ref && 
+    a._property === currentProperty && 
+    !EXCLUDED.includes(a.status) &&
+    !isBlacklisted(a.first_name, a.last_name, a.email)
+  );
   if(!others.length) return;
 
   const linkedRefs = getLinkedRefs(ref);
