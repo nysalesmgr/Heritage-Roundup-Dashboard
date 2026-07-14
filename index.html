@@ -633,6 +633,7 @@ const SB_HEADERS = {'Content-Type':'application/json','apikey':SUPABASE_KEY,'Aut
 
 // ── STATE ────────────────────────────────────────────────
 let apps = [];
+let linkedReservations = [];
 let selectedRef = null;
 let pinBuffer = '';
 let currentProperty = 'boston';
@@ -736,6 +737,7 @@ async function loadApps(showMsg){
   await loadEditableData();
   await loadRenewals();
   await loadBlacklist();
+  await loadLinkedReservations();
   if(currentProperty === 'boston'){
     await loadBostonApps();
   } else {
@@ -1169,7 +1171,7 @@ function appRow(a, showReservation=false){
     ${nyCell(a.ref_number,'season','season')}
     <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer${isBlacklisted(a.first_name,a.last_name,a.email)?';background:var(--rej-bg)':''}">
       <div class="td-name" style="${isBlacklisted(a.first_name,a.last_name,a.email)?'color:var(--rej)':''}">
-        ${isBlacklisted(a.first_name,a.last_name,a.email)?'🚫 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
+        ${isBlacklisted(a.first_name,a.last_name,a.email)?'🚫 ':''}${isLinked(a.ref_number)?'🔗 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
       </div>
       <div class="td-email">${esc(a.email||'')}</div>
     </td>
@@ -1472,7 +1474,13 @@ function openPanel(ref){
 
   document.getElementById('pan-ref').textContent  = a.ref_number||'—';
   document.getElementById('pan-name').textContent = ((a.first_name||'')+' '+(a.last_name||'')).trim()||'—';
-  document.getElementById('pan-meta').innerHTML   = badge(a.status) + ' ' + srcBadge(a._source);
+  document.getElementById('pan-meta').innerHTML = badge(a.status) + ' ' + srcBadge(a._source);
+  // Show linked applicants
+  const linkedRefs = getLinkedRefs(ref);
+  if(linkedRefs.length){
+    const linkedNames = linkedRefs.map(r=>{ const la=apps.find(x=>x.ref_number===r); return la ? `${esc(la.first_name||'')} ${esc(la.last_name||'')}` : r; }).join(', ');
+    document.getElementById('pan-meta').innerHTML += ` <span style="font-size:11px;color:#3730A3;background:#EEF2FF;padding:2px 8px;border-radius:10px;margin-left:6px">🔗 Linked with: ${linkedNames}</span>`;
+  }
 
   // Action buttons
   const acts = document.getElementById('pan-acts');
@@ -1653,28 +1661,66 @@ async function setStatus(ref, newStatus){
   toast('Status → ' + newStatus + ' ✓');
 }
 
-function showLinkStatusPopup(ref, newStatus){
-  const others = apps.filter(a => a.ref_number !== ref && !['To Drop','Drop Out ($500)','Payment Received/Finalized'].includes(a.status));
+async function loadLinkedReservations(){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/linked_reservations?select=*`, { headers: SB_HEADERS });
+    if(res.ok) linkedReservations = await res.json();
+  }catch(e){ console.warn('Linked reservations load error:', e); }
+}
+
+function getLinkedRefs(ref){
+  const linked = new Set();
+  linkedReservations.forEach(l=>{
+    if(l.ref_number===ref) linked.add(l.linked_ref);
+    if(l.linked_ref===ref) linked.add(l.ref_number);
+  });
+  return [...linked];
+}
+
+function isLinked(ref){ return getLinkedRefs(ref).length > 0; }
+
+function showLinkStatusPopup(ref, currentStatus){
+  const others = apps.filter(a => a.ref_number !== ref);
   if(!others.length) return;
+
+  const linkedRefs = getLinkedRefs(ref);
 
   const list = others.map(a=>`
     <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px">
-      <input type="checkbox" value="${esc(a.ref_number)}" style="width:14px;height:14px">
-      <span><strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong> <span style="color:var(--t3);font-size:11px">${esc(a.ref_number)}</span></span>
+      <input type="checkbox" value="${esc(a.ref_number)}" ${linkedRefs.includes(a.ref_number)?'checked':''} style="width:14px;height:14px">
+      <span>
+        <strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong>
+        <span style="color:var(--t3);font-size:11px"> ${esc(a.ref_number)}</span>
+        ${linkedRefs.includes(a.ref_number)?'<span style="color:#3730A3;font-size:10px;margin-left:4px">🔗 linked</span>':''}
+      </span>
     </label>`).join('');
 
   document.getElementById('link-status-list').innerHTML = list;
-  document.getElementById('link-status-label').textContent = `Tick applicants to apply the same status: "${newStatus}"`;
-  document.getElementById('link-status-modal').dataset.status = newStatus;
+  document.getElementById('link-status-label').textContent = `Link applicants and apply status: "${currentStatus}"`;
+  document.getElementById('link-status-modal').dataset.status = currentStatus;
+  document.getElementById('link-status-modal').dataset.ref = ref;
   document.getElementById('link-status-modal').style.display = 'flex';
 }
 
 async function applyLinkedStatus(){
   const modal = document.getElementById('link-status-modal');
   const newStatus = modal.dataset.status;
+  const sourceRef = modal.dataset.ref;
   const checked = [...modal.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
-  if(!checked.length){ closeLinkStatusModal(); return; }
 
+  // Save new links to Supabase (only ones not already linked)
+  const existingLinked = getLinkedRefs(sourceRef);
+  for(const ref of checked){
+    if(!existingLinked.includes(ref)){
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/linked_reservations`, {
+        method:'POST', headers:{...SB_HEADERS,'Prefer':'return=representation'},
+        body: JSON.stringify({ ref_number: sourceRef, linked_ref: ref, created_by: currentStaff })
+      });
+      if(res.ok){ const rows=await res.json(); linkedReservations.push(rows[0]); }
+    }
+  }
+
+  // Apply status to checked entries
   for(const ref of checked){
     const a = apps.find(x=>x.ref_number===ref);
     if(!a) continue;
@@ -1696,9 +1742,10 @@ async function applyLinkedStatus(){
       }
     }
   }
+
   closeLinkStatusModal();
   refreshAll();
-  toast(`Status applied to ${checked.length} applicant${checked.length>1?'s':''} ✓`);
+  if(checked.length) toast(`Linked & status applied to ${checked.length} applicant${checked.length>1?'s':''} ✓`);
 }
 
 function closeLinkStatusModal(){ document.getElementById('link-status-modal').style.display='none'; }
