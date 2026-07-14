@@ -588,6 +588,14 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Viewing Preference</div><div class="il-v" id="t-viewing">—</div></div>
         </div>
       </div>
+      <div class="isec">
+        <div class="isec-title">VMU Dates</div>
+        <div id="panel-vmu-dates"></div>
+      </div>
+      <div class="isec">
+        <div class="isec-title">IPT Dates</div>
+        <div id="panel-ipt-dates"></div>
+      </div>
     </div>
     <div id="tab-documents" class="ptc">
       <div class="isec"><div class="isec-title">Uploaded Documents</div><div id="t-docs-list"></div></div>
@@ -1182,8 +1190,8 @@ function appRow(a, showReservation=false){
     ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : (a.formsite_moveout||''))}
     ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
     ${nyCell(a.ref_number,'incentives','text')}
-    ${nyCell(a.ref_number,'vmu','date')}
-    ${nyCell(a.ref_number,'ipt','date')}
+    ${multiDateCell(a.ref_number,'vmu')}
+    ${multiDateCell(a.ref_number,'ipt')}
     ${nyCell(a.ref_number,'student_status','student')}
     ${nyCell(a.ref_number,'prev_accommodation','text')}
   </tr>`;
@@ -1424,7 +1432,82 @@ function editCell(td, ref, field, type){
   }
 }
 
-function nyCell(ref, field, type, fallback){ 
+function multiDateCell(ref, field){
+  const raw = getNYData(ref)[field] || '';
+  const dates = raw.split('\n').map(d=>d.trim()).filter(Boolean);
+  const display = dates.length ? dates.map(d=>fmtDate(d)).join('<br>') : '—';
+  return `<td class="editable-cell" onclick="openMultiDateEditor('${esc(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
+}
+
+function openMultiDateEditor(ref, field, td){
+  const raw = getNYData(ref)[field] || '';
+  const dates = raw.split('\n').map(d=>d.trim()).filter(Boolean);
+  const label = field==='vmu' ? 'VMU' : 'IPT';
+
+  let html = `<div style="padding:4px">`;
+  dates.forEach((d,i)=>{
+    html += `<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+      <input type="date" value="${d}" onchange="updateMultiDate('${esc(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px;font-family:Inter,sans-serif">
+      <span onclick="deleteMultiDate('${esc(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:12px">✕</span>
+    </div>`;
+  });
+  html += `<button onclick="addMultiDate('${esc(ref)}','${field}')" style="font-size:11px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;margin-top:2px">+ Add ${label} Date</button></div>`;
+
+  td.innerHTML = html;
+  td.onclick = null; // prevent re-opening
+}
+
+function getMultiDates(ref, field){
+  const raw = getNYData(ref)[field] || '';
+  return raw.split('\n').map(d=>d.trim()).filter(Boolean);
+}
+
+function saveMultiDates(ref, field, dates){
+  setNYData(ref, { [field]: dates.join('\n') });
+}
+
+function addMultiDate(ref, field){
+  const dates = getMultiDates(ref, field);
+  dates.push(new Date().toISOString().slice(0,10));
+  saveMultiDates(ref, field, dates);
+  renderTable();
+  if(selectedRef === ref) renderPanelViewingDates(ref);
+  toast((field==='vmu'?'VMU':'IPT') + ' date added ✓');
+}
+
+function updateMultiDate(ref, field, idx, val){
+  const dates = getMultiDates(ref, field);
+  dates[idx] = val;
+  saveMultiDates(ref, field, dates);
+  renderTable();
+  if(selectedRef === ref) renderPanelViewingDates(ref);
+}
+
+function deleteMultiDate(ref, field, idx){
+  const dates = getMultiDates(ref, field);
+  dates.splice(idx, 1);
+  saveMultiDates(ref, field, dates);
+  renderTable();
+  if(selectedRef === ref) renderPanelViewingDates(ref);
+  toast((field==='vmu'?'VMU':'IPT') + ' date removed');
+}
+
+function renderPanelViewingDates(ref){
+  ['vmu','ipt'].forEach(field=>{
+    const el = document.getElementById('panel-'+field+'-dates');
+    if(!el) return;
+    const dates = getMultiDates(ref, field);
+    const label = field==='vmu' ? 'VMU' : 'IPT';
+    el.innerHTML = dates.map((d,i)=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="date" value="${d}" onchange="updateMultiDate('${esc(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:Inter,sans-serif">
+        <span onclick="deleteMultiDate('${esc(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:13px">✕</span>
+      </div>`).join('') +
+      `<button onclick="addMultiDate('${esc(ref)}','${field}')" style="font-size:12px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">+ Add ${label} Date</button>`;
+  });
+}
+
+function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
   if(Object.keys(cached).length > 1) console.log('nyCell cache hit:', ref, field, '=', cached[field]);
   const val=cached[field]||(fallback||''); 
@@ -1578,6 +1661,7 @@ function openPanel(ref){
   // Remarks tab
   document.getElementById('remarks-text').value = '';
   document.getElementById('remarks-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
+  renderPanelViewingDates(ref);
   document.getElementById('notes-text').value = 'Loading…';
   document.getElementById('tl-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
 
