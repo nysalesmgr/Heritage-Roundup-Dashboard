@@ -1680,7 +1680,7 @@ function getLinkedRefs(ref){
 function isLinked(ref){ return getLinkedRefs(ref).length > 0; }
 
 function showLinkStatusPopup(ref, currentStatus){
-  const others = apps.filter(a => a.ref_number !== ref);
+  const others = apps.filter(a => a.ref_number !== ref && a._property === currentProperty);
   if(!others.length) return;
 
   const linkedRefs = getLinkedRefs(ref);
