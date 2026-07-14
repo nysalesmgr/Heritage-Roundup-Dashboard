@@ -1685,21 +1685,42 @@ function showLinkStatusPopup(ref, currentStatus){
 
   const linkedRefs = getLinkedRefs(ref);
 
-  const list = others.map(a=>`
-    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px">
-      <input type="checkbox" value="${esc(a.ref_number)}" ${linkedRefs.includes(a.ref_number)?'checked':''} style="width:14px;height:14px">
-      <span>
-        <strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong>
-        <span style="color:var(--t3);font-size:11px"> ${esc(a.ref_number)}</span>
-        ${linkedRefs.includes(a.ref_number)?'<span style="color:#3730A3;font-size:10px;margin-left:4px">🔗 linked</span>':''}
-      </span>
-    </label>`).join('');
+  const list = others.map(a=>{
+    const alreadyLinked = linkedRefs.includes(a.ref_number);
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;flex:1">
+        <input type="checkbox" value="${esc(a.ref_number)}" ${alreadyLinked?'checked':''} style="width:14px;height:14px">
+        <span>
+          <strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong>
+          <span style="color:var(--t3);font-size:11px"> ${esc(a.ref_number)}</span>
+          ${alreadyLinked?'<span style="color:#3730A3;font-size:10px;margin-left:4px">🔗 linked</span>':''}
+        </span>
+      </label>
+      ${alreadyLinked?`<button onclick="unlinkReservation('${ref}','${a.ref_number}')" style="font-size:11px;color:var(--rej);background:none;border:1px solid var(--rej);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif">Unlink</button>`:''}
+    </div>`;
+  }).join('');
 
   document.getElementById('link-status-list').innerHTML = list;
   document.getElementById('link-status-label').textContent = `Link applicants and apply status: "${currentStatus}"`;
   document.getElementById('link-status-modal').dataset.status = currentStatus;
   document.getElementById('link-status-modal').dataset.ref = ref;
   document.getElementById('link-status-modal').style.display = 'flex';
+}
+
+async function unlinkReservation(ref1, ref2){
+  // Delete both directions
+  await fetch(`${SUPABASE_URL}/rest/v1/linked_reservations?ref_number=eq.${encodeURIComponent(ref1)}&linked_ref=eq.${encodeURIComponent(ref2)}`, { method:'DELETE', headers: SB_HEADERS });
+  await fetch(`${SUPABASE_URL}/rest/v1/linked_reservations?ref_number=eq.${encodeURIComponent(ref2)}&linked_ref=eq.${encodeURIComponent(ref1)}`, { method:'DELETE', headers: SB_HEADERS });
+  linkedReservations = linkedReservations.filter(l=>
+    !(l.ref_number===ref1 && l.linked_ref===ref2) &&
+    !(l.ref_number===ref2 && l.linked_ref===ref1)
+  );
+  // Refresh the modal list
+  const modal = document.getElementById('link-status-modal');
+  showLinkStatusPopup(modal.dataset.ref, modal.dataset.status);
+  refreshAll();
+  toast('Unlinked ✓');
 }
 
 async function applyLinkedStatus(){
