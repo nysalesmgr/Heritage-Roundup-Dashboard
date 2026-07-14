@@ -1509,9 +1509,9 @@ function renderPanelViewingDates(ref){
 
 function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
-  if(Object.keys(cached).length > 1) console.log('nyCell cache hit:', ref, field, '=', cached[field]);
-  const val=cached[field]||(fallback||''); 
-  return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?val:'—'}</span></td>`; 
+  const val = cached[field]||(fallback||'');
+  const display = val && val!=='—' ? (type==='date' ? fmtDate(val) : val) : '—';
+  return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${display}</span></td>`;
 }
 
 // ── APPLICATIONS TABLE ────────────────────────────────────
