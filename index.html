@@ -423,8 +423,8 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Completed</div><div class="ps-sub">Payment Received / Finalized</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
-          <tbody id="completed-tbody"><tr class="loading-row"><td colspan="14">No completed applications</td></tr></tbody>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+          <tbody id="completed-tbody"><tr class="loading-row"><td colspan="15">No completed applications</td></tr></tbody>
         </table>
       </div></div>
     </div>
@@ -1158,11 +1158,11 @@ function renderCompletedPage(){
   const tbody = document.getElementById('completed-tbody');
   if(!tbody) return;
   const completed = apps.filter(a=>a.status==='Payment Received/Finalized');
-  if(!completed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="14">No completed applications</td></tr>`; return; }
-  tbody.innerHTML = completed.map(a=>appRow(a)).join('');
+  if(!completed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="15">No completed applications</td></tr>`; return; }
+  tbody.innerHTML = completed.map(a=>appRow(a, true)).join('');
 }
 
-function appRow(a){
+function appRow(a, showReservation=false){
   return `<tr>
     <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
     <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
@@ -1174,6 +1174,7 @@ function appRow(a){
       <div class="td-email">${esc(a.email||'')}</div>
     </td>
     ${nyCell(a.ref_number,'lead_source','text', a.formsite_source||'')}
+    ${showReservation ? nyCell(a.ref_number,'reservation_no','text') : ''}
     ${nyCell(a.ref_number,'unit','text', a._source==='Booking Engine' ? aptTitle(a) : '')}
     ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : (a.formsite_movein||''))}
     ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : (a.formsite_moveout||''))}
