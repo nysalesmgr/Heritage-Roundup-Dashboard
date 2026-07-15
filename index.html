@@ -808,7 +808,7 @@ function normalizeSupabaseFormsite(row){
   const property = source.startsWith('NY') ? 'newyork' : 'boston';
   const raw      = row.raw_data || {};
   const nyStatus = getNYStatus(row.ref_number);
-  return {
+  const result = {
     ref_number:    row.ref_number || row.id,
     created_at:    row.created_at,
     first_name:    row.first_name || '',
@@ -841,6 +841,20 @@ function normalizeSupabaseFormsite(row){
     _source:   source.includes('Domestic') ? 'Domestic' : 'International',
     _property: property,
   };
+  // Auto-save move-in, move-out and source to editable_data if not already set
+  const cached = editableCache[ref] || {};
+  const movein  = raw['81'] ? raw['81'] : (raw['82'] || '');
+  const moveout = raw['81'] ? raw['82'] : (raw['83'] || '');
+  const src     = raw['26'] || '';
+  const updates = {};
+  if(movein  && !cached.move_in)     updates.move_in     = movein;
+  if(moveout && !cached.move_out)    updates.move_out    = moveout;
+  if(src     && !cached.lead_source) updates.lead_source = src;
+  if(Object.keys(updates).length){
+    editableCache[ref] = { ...cached, ...updates };
+    setTimeout(()=>setNYData(ref, updates), 100);
+  }
+  return result;
 }
 
 // ── NY STATUS (localStorage) ──────────────────────────────
