@@ -667,12 +667,20 @@ let editableCache = {};
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('overview-date').textContent =
     new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  loadStaffPins();
 });
 
 const STAFF_LIST = ['Kyla','Dianna','Charlotte','Will','Jonia','Karen'];
 
 // ── PIN ──────────────────────────────────────────────────
-function getPin(name){ return localStorage.getItem('hc_pin_'+name) || '8181'; }
+let staffPins = {};
+async function loadStaffPins(){
+  try{
+    const res = await fetch(SUPABASE_URL+'/rest/v1/staff_pins?select=*', { headers: SB_HEADERS });
+    if(res.ok){ const rows=await res.json(); rows.forEach(r=>{ staffPins[r.staff_name]=r.pin; }); }
+  }catch(e){ console.warn('Staff pins load error:', e); }
+}
+function getPin(name){ return staffPins[name] || '8181'; }
 
 function selectStaffForPin(name){
   currentStaff = name;
@@ -734,10 +742,15 @@ function logout(){
   stopAutoRefresh();
   isLoading = false;
 }
-function changePin(){
+async function changePin(){
   const np = prompt('Enter new 4-digit PIN for ' + currentStaff + ':');
-  if(np && /^\d{4}$/.test(np)){ localStorage.setItem('hc_pin_'+currentStaff, np); toast('PIN updated for ' + currentStaff + ' ✓'); }
-  else if(np) alert('PIN must be exactly 4 digits.');
+  if(!np || !/^\d{4}$/.test(np)){ if(np) alert('PIN must be exactly 4 digits.'); return; }
+  const res = await fetch(SUPABASE_URL+'/rest/v1/staff_pins?staff_name=eq.'+encodeURIComponent(currentStaff), {
+    method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
+    body: JSON.stringify({ pin: np, updated_at: new Date().toISOString() })
+  });
+  if(res.ok){ staffPins[currentStaff] = np; toast('PIN updated for ' + currentStaff + ' ✓'); }
+  else { toast('Error updating PIN'); }
 }
 
 // ── PROPERTY SWITCHER ─────────────────────────────────────
