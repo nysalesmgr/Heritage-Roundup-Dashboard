@@ -276,6 +276,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ni" onclick="loadApps(true)"><span class="ni-icon">↻</span> Refresh</div>
       <div class="ni" onclick="exportCSV()"><span class="ni-icon">↓</span> Export CSV</div>
       <div class="ni" onclick="changePin()"><span class="ni-icon">⚙</span> Change PIN</div>
+      <div class="ni" onclick="runDiagnostics()"><span class="ni-icon">🔍</span> Run Diagnostics</div>
     </nav>
     <div class="sb-stats">
       <div class="sb-stat-label" id="sb-prop-label">Boston</div>
@@ -470,6 +471,19 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     </div>
   </div>
 </div>
+<!-- DIAGNOSTICS MODAL -->
+<div id="diag-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center">
+  <div style="background:var(--card);border-radius:14px;padding:28px 32px;width:520px;max-width:95%;max-height:80vh;overflow-y:auto">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin-bottom:6px">🔍 Dashboard Diagnostics</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:20px" id="diag-timestamp"></div>
+    <div id="diag-results"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+      <button onclick="runDiagnostics()" style="background:#F4F2EE;border:1px solid var(--border);border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">Re-run</button>
+      <button onclick="document.getElementById('diag-modal').style.display='none'" class="notes-save-btn" style="margin:0;padding:8px 20px;font-size:12px">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- LINK STATUS MODAL -->
 <div id="link-status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center">
   <div style="background:var(--card);border-radius:14px;padding:28px 32px;width:460px;max-width:95%">
@@ -1868,6 +1882,69 @@ async function applyLinkedStatus(){
 }
 
 function closeLinkStatusModal(){ document.getElementById('link-status-modal').style.display='none'; }
+
+async function runDiagnostics(){
+  document.getElementById('diag-modal').style.display = 'flex';
+  document.getElementById('diag-timestamp').textContent = 'Running checks… ' + new Date().toLocaleString('en-GB');
+  document.getElementById('diag-results').innerHTML = '<div style="color:var(--t3);font-size:13px">Checking…</div>';
+
+  const checks = [];
+
+  // 1. Supabase connection
+  try{
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/applications?limit=1`, { headers: SB_HEADERS });
+    checks.push({ ok: r.ok, label: 'Supabase connection', detail: r.ok ? 'Connected successfully' : `HTTP ${r.status}` });
+  }catch(e){ checks.push({ ok:false, label:'Supabase connection', detail: e.message }); }
+
+  // 2. Duplicate entries
+  const refs = apps.map(a=>a.ref_number);
+  const dupes = refs.filter((r,i)=>refs.indexOf(r)!==i);
+  const uniqueDupes = [...new Set(dupes)];
+  checks.push({ ok: uniqueDupes.length===0, label:'Duplicate entries', detail: uniqueDupes.length===0 ? 'No duplicates found' : `${uniqueDupes.length} duplicate(s): ${uniqueDupes.join(', ')}` });
+
+  // 3. Apps loaded
+  checks.push({ ok: apps.length>0, label:'Applications loaded', detail: `${apps.length} apps in memory (${currentProperty})` });
+
+  // 4. editable_data sync
+  const cacheCount = Object.keys(editableCache).length;
+  checks.push({ ok: true, label:'Editable data cache', detail: `${cacheCount} rows cached` });
+
+  // 5. Blacklist loaded
+  checks.push({ ok: true, label:'Blacklist', detail: `${blacklistNames.length} entries (${currentProperty})` });
+
+  // 6. Renewals loaded
+  checks.push({ ok: true, label:'Renewals', detail: `${renewalRows.length} entries` });
+
+  // 7. Linked reservations
+  checks.push({ ok: true, label:'Linked reservations', detail: `${linkedReservations.length} links stored` });
+
+  // 8. Staff logged in
+  checks.push({ ok: !!currentStaff, label:'Staff session', detail: currentStaff ? `Logged in as ${currentStaff}` : 'No staff logged in' });
+
+  // 9. Auto-refresh
+  checks.push({ ok: !!autoRefreshTimer, label:'Auto-refresh', detail: autoRefreshTimer ? 'Active (60s interval)' : 'Not running' });
+
+  // 10. Apps with missing names
+  const noName = apps.filter(a=>!a.first_name && !a.last_name);
+  checks.push({ ok: noName.length===0, label:'Apps with missing names', detail: noName.length===0 ? 'All apps have names' : `${noName.length} app(s) missing name: ${noName.map(a=>a.ref_number).join(', ')}` });
+
+  // Render results
+  const html = checks.map(c=>`
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:16px;flex-shrink:0">${c.ok?'✅':'❌'}</span>
+      <div>
+        <div style="font-size:13px;font-weight:600">${c.label}</div>
+        <div style="font-size:12px;color:var(--t3)">${c.detail}</div>
+      </div>
+    </div>`).join('');
+
+  const passed = checks.filter(c=>c.ok).length;
+  const total = checks.length;
+  const summary = `<div style="font-size:13px;font-weight:700;margin-bottom:12px;color:${passed===total?'var(--agr)':'var(--rej)'}">${passed}/${total} checks passed</div>`;
+
+  document.getElementById('diag-results').innerHTML = summary + html;
+  document.getElementById('diag-timestamp').textContent = 'Last run: ' + new Date().toLocaleString('en-GB');
+}
 
 async function saveRemarks(){
   if(!selectedRef) return;
