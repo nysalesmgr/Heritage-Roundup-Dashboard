@@ -642,6 +642,7 @@ const SB_HEADERS = {'Content-Type':'application/json','apikey':SUPABASE_KEY,'Aut
 // ── STATE ────────────────────────────────────────────────
 let apps = [];
 let linkedReservations = [];
+let isLoading = false;
 let selectedRef = null;
 let pinBuffer = '';
 let currentProperty = 'boston';
@@ -717,6 +718,7 @@ function logout(){
   document.getElementById('app').classList.remove('ready');
   pinBuffer=''; currentStaff=''; updateDots(); closePanel();
   stopAutoRefresh();
+  isLoading = false;
 }
 function changePin(){
   const np = prompt('Enter new 4-digit PIN for ' + currentStaff + ':');
@@ -740,19 +742,25 @@ function switchProperty(p){
 
 // ── LOAD APPS ─────────────────────────────────────────────
 async function loadApps(showMsg){
+  if(isLoading) return;
+  isLoading = true;
   if(showMsg) toast('Refreshing…');
   apps = [];
-  await loadEditableData();
-  await loadRenewals();
-  await loadBlacklist();
-  await loadLinkedReservations();
-  if(currentProperty === 'boston'){
-    await loadBostonApps();
-  } else {
-    await loadNYApps();
+  try{
+    await loadEditableData();
+    await loadRenewals();
+    await loadBlacklist();
+    await loadLinkedReservations();
+    if(currentProperty === 'boston'){
+      await loadBostonApps();
+    } else {
+      await loadNYApps();
+    }
+    refreshAll();
+    if(showMsg) toast('Loaded ' + apps.length + ' applications ✓');
+  } finally {
+    isLoading = false;
   }
-  refreshAll();
-  if(showMsg) toast('Loaded ' + apps.length + ' applications ✓');
 }
 
 // BOSTON: Supabase booking engine + Formsite via Supabase
