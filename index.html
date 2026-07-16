@@ -805,12 +805,31 @@ async function loadBostonApps(){
   apps.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
 }
 
-// NEW YORK: Formsite via Supabase
+// NEW YORK: Formsite via Supabase + NY Booking Engine
 async function loadNYApps(){
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/formsite_submissions?source=like.NY*&order=created_at.desc', { headers: SB_HEADERS });
     if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push(normalizeSupabaseFormsite(r))); }
   } catch(e){ console.error('NY Formsite error:', e); }
+
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?select=*&order=created_at.desc', { headers: SB_HEADERS });
+    if(res.ok){
+      const rows = await res.json();
+      rows.forEach(r=>apps.push({
+        ...r,
+        ref_number:   String(r.ref_number||r.id),
+        start_date:   r.move_in||'',
+        end_date:     r.move_out||'',
+        college:      r.raw_data?.college||'',
+        first_name:   r.first_name||'',
+        last_name:    r.last_name||'',
+        apartment:    r.unit||'',
+        _source:      'NY Booking Engine',
+        _property:    'newyork',
+      }));
+    }
+  } catch(e){ console.error('NY Booking Engine error:', e); }
 
   apps.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
 }
@@ -2086,7 +2105,7 @@ function badge(s){
   return `<span class="badge ${statusClass(s)}">${s||'—'}</span>`;
 }
 function srcBadge(s){
-  const cls = s==='Booking Engine' ? 'src-supabase' : s==='International' ? 'src-international' : 'src-domestic';
+  const cls = s==='Booking Engine' ? 'src-supabase' : s==='NY Booking Engine' ? 'src-supabase' : s==='International' ? 'src-international' : 'src-domestic';
   return `<span class="src-badge ${cls}">${s||'—'}</span>`;
 }
 function fmtDate(d){
