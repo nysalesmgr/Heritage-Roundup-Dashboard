@@ -825,7 +825,7 @@ async function loadNYApps(){
         first_name:   r.first_name||'',
         last_name:    r.last_name||'',
         apartment:    r.unit||'',
-        _source:      'NY Booking Engine',
+        _source:      'NY Summer Booking Engine',
         _property:    'newyork',
       }));
     }
@@ -2105,7 +2105,7 @@ function badge(s){
   return `<span class="badge ${statusClass(s)}">${s||'—'}</span>`;
 }
 function srcBadge(s){
-  const cls = s==='Booking Engine' ? 'src-supabase' : s==='NY Booking Engine' ? 'src-supabase' : s==='International' ? 'src-international' : 'src-domestic';
+  const cls = s==='Booking Engine' ? 'src-supabase' : s==='NY Summer Booking Engine' ? 'src-supabase' : s==='International' ? 'src-international' : 'src-domestic';
   return `<span class="src-badge ${cls}">${s||'—'}</span>`;
 }
 function fmtDate(d){
