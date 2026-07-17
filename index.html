@@ -816,20 +816,47 @@ async function loadNYApps(){
     const res = await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?select=*&order=created_at.desc', { headers: SB_HEADERS });
     if(res.ok){
       const rows = await res.json();
-      rows.forEach(r=>apps.push({
-        ...r,
-        ref_number:   String(r.ref_number||r.id),
-        start_date:   r.move_in||'',
-        end_date:     r.move_out||'',
-        college:      r.raw_data?.college||'',
-        first_name:   r.first_name||'',
-        last_name:    r.last_name||'',
-        apartment:    r.unit||'',
-        _source:      'NY Summer Booking Engine',
-        _property:    'newyork',
-      }));
+      rows.forEach(r=>{
+        const ref = String(r.ref_number||r.id);
+        const raw = r.raw_data || {};
+        // Parse occupants_details for licensee info
+        let occ = [];
+        try{ occ = JSON.parse(raw.occupants_details||'[]'); }catch(e){}
+        const app = {
+          ...r,
+          ref_number:    ref,
+          first_name:    r.first_name||'',
+          last_name:     r.last_name||'',
+          email:         r.email||'',
+          phone:         r.phone||'',
+          college:       occ[0]?.college||'',
+          apartment:     r.unit||'',
+          start_date:    r.move_in||'',
+          end_date:      r.move_out||'',
+          monthly_rate:  r.monthly_rate||'',
+          payment_plan:  r.payment_plan||'',
+          occupants:     String(r.occupants||'1'),
+          license_url:   occ[0]?.driver_license_url||'',
+          enrollment_url:occ[0]?.enrollment_letter_url||'',
+          internship_url:occ[0]?.internship_offer_url||'',
+          _source:       'NY Summer Booking Engine',
+          _property:     'newyork',
+        };
+        apps.push(app);
+        // Auto-fill editable fields if not already set
+        const cached = editableCache[ref]||{};
+        const updates = {};
+        if(r.unit       && !cached.unit)         updates.unit         = r.unit;
+        if(r.move_in    && !cached.move_in)       updates.move_in      = r.move_in;
+        if(r.move_out   && !cached.move_out)      updates.move_out     = r.move_out;
+        if(r.monthly_rate && !cached.monthly_rent) updates.monthly_rent = r.monthly_rate;
+        if(Object.keys(updates).length){
+          editableCache[ref] = {...cached, ...updates};
+          setTimeout(()=>setNYData(ref, updates), 100);
+        }
+      });
     }
-  } catch(e){ console.error('NY Booking Engine error:', e); }
+  } catch(e){ console.error('NY Summer Booking Engine error:', e); }
 
   apps.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
 }
