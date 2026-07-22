@@ -1626,8 +1626,24 @@ function renderTable(){
   const tbody = document.getElementById('apps-tbody');
 
   const EXCLUDED_STATUSES = ['To Drop','Drop Out ($500)','Payment Received/Finalized'];
+  
+  // Deduplicate by full name — keep latest per name, unless older is in a terminal status
+  const nameMap = new Map();
+  apps.filter(a => !EXCLUDED_STATUSES.includes(a.status)).forEach(a => {
+    const name = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
+    if(!name) return;
+    const existing = nameMap.get(name);
+    if(!existing || new Date(a.created_at) > new Date(existing.created_at)){
+      nameMap.set(name, a);
+    }
+  });
+  const activeRefs = new Set([...nameMap.values()].map(a=>a.ref_number));
+
   let filtered = apps.filter(a=>{
     if(EXCLUDED_STATUSES.includes(a.status)) return false;
+    // Hide older duplicates (not the latest)
+    const dupName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
+    if(dupName && !activeRefs.has(a.ref_number)) return false;
     const name = ((a.first_name||'') + ' ' + (a.last_name||'')).toLowerCase();
     const matchQ = !q || name.includes(q) || (a.email||'').toLowerCase().includes(q) || (a.ref_number||'').toLowerCase().includes(q);
     const matchS = sf==='all' || a.status===sf;
