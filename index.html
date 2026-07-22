@@ -850,6 +850,7 @@ async function loadNYApps(){
         if(r.move_in    && !cached.move_in)       updates.move_in      = r.move_in;
         if(r.move_out   && !cached.move_out)      updates.move_out     = r.move_out;
         if(r.monthly_rate && !cached.monthly_rent) updates.monthly_rent = r.monthly_rate;
+        if(!cached.lead_source)                    updates.lead_source  = 'NY Summer Booking Engine';
         if(Object.keys(updates).length){
           editableCache[ref] = {...cached, ...updates};
           setTimeout(()=>setNYData(ref, updates), 100);
