@@ -846,7 +846,9 @@ async function loadNYApps(){
         // Auto-fill editable fields if not already set
         const cached = editableCache[ref]||{};
         const updates = {};
-        if(r.unit       && !cached.unit)         updates.unit         = r.unit;
+        const roomId = (r.raw_data||{}).room_id||'';
+        const unitVal = roomId && r.unit ? roomId+' - '+r.unit : (r.unit||'');
+        if(unitVal && !cached.unit) updates.unit = unitVal;
         if(r.move_in    && !cached.move_in)       updates.move_in      = r.move_in;
         if(r.move_out   && !cached.move_out)      updates.move_out     = r.move_out;
         if(r.monthly_rate && !cached.monthly_rent){
