@@ -1767,8 +1767,7 @@ function openPanel(ref){
   document.getElementById('panel').classList.add('on');
 
   // Async load
-  Promise.all([fetchNotes(ref), fetchHistory(ref)]).then(([noteText, histEntries])=>{
-    document.getElementById('notes-text').value = noteText;
+  Promise.all([fetchHistory(ref)]).then(([histEntries])=>{
     renderRemarksList(histEntries);
     const tl = document.getElementById('tl-list');
     if(!histEntries.length){
