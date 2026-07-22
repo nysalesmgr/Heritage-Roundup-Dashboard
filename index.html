@@ -1261,7 +1261,17 @@ async function deleteBlacklistEntry(id){
 function renderDropPage(){
   const tbody = document.getElementById('drop-tbody');
   if(!tbody) return;
-  const dropped = apps.filter(a=>['To Drop','Drop Out ($500)'].includes(a.status));
+  // Hide drop entries that have a newer active resubmission by same person
+  const activeNames = new Set(
+    apps.filter(a=>!['To Drop','Drop Out ($500)','Payment Received/Finalized'].includes(a.status))
+      .map(a=>((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase())
+  );
+  const dropped = apps.filter(a=>{
+    if(!['To Drop','Drop Out ($500)'].includes(a.status)) return false;
+    const name = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
+    // Hide if same person has a newer active application
+    return !activeNames.has(name);
+  });
   if(!dropped.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="14">No dropped applications</td></tr>`; return; }
   tbody.innerHTML = dropped.map(a=>appRow(a)).join('');
 }
@@ -1788,8 +1798,14 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
-  // Async load
-  Promise.all([fetchHistory(ref)]).then(([histEntries])=>{
+  // Async load — also fetch history from older entries by same name
+  const fullName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
+  const olderRefs = apps
+    .filter(x => x.ref_number !== ref && ((x.first_name||'')+' '+(x.last_name||'')).trim().toLowerCase() === fullName)
+    .map(x => x.ref_number);
+
+  Promise.all([fetchHistory(ref), ...olderRefs.map(r=>fetchHistory(r))]).then(results=>{
+    const histEntries = results.flat().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     renderRemarksList(histEntries);
     const tl = document.getElementById('tl-list');
     if(!histEntries.length){
