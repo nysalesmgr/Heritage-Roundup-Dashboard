@@ -849,7 +849,10 @@ async function loadNYApps(){
         if(r.unit       && !cached.unit)         updates.unit         = r.unit;
         if(r.move_in    && !cached.move_in)       updates.move_in      = r.move_in;
         if(r.move_out   && !cached.move_out)      updates.move_out     = r.move_out;
-        if(r.monthly_rate && !cached.monthly_rent) updates.monthly_rent = '$' + r.monthly_rate;
+        if(r.monthly_rate && !cached.monthly_rent){
+          const num = parseFloat(r.monthly_rate);
+          updates.monthly_rent = '$' + (isNaN(num) ? r.monthly_rate : Math.round(num).toLocaleString('en-US'));
+        }
         if(!cached.lead_source)                    updates.lead_source  = 'NY Summer Booking Engine';
         if(!cached.season)                         updates.season       = 'Summer';
         if(Object.keys(updates).length){
