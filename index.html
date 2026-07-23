@@ -1878,6 +1878,34 @@ async function setStatus(ref, newStatus){
   renderFinishLine();
   renderRenewals();
   toast('Status → ' + newStatus + ' ✓');
+
+  // Auto-sync to linked reservations
+  const linkedRefs = getLinkedRefs(ref);
+  if(linkedRefs.length){
+    for(const linkedRef of linkedRefs){
+      const la = apps.find(x=>x.ref_number===linkedRef);
+      if(!la || la.status===newStatus) continue;
+      if(la._source==='Booking Engine'){
+        await fetch(SUPABASE_URL+'/rest/v1/applications?ref_number=eq.'+encodeURIComponent(linkedRef),{
+          method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
+          body: JSON.stringify({status: newStatus})
+        });
+      } else {
+        setNYStatus(linkedRef, newStatus);
+      }
+      la.status = newStatus;
+      await insertHistory(linkedRef, 'status', newStatus);
+      if(newStatus==='Agreement Issued'){
+        const existing = editableCache[linkedRef]||{};
+        if(!existing.agr_date){
+          const today=new Date(); const due=new Date(today); due.setDate(due.getDate()+2);
+          setNYData(linkedRef,{agr_date:today.toISOString().slice(0,10),payment_due:due.toISOString().slice(0,10)});
+        }
+      }
+    }
+    refreshAll();
+    toast(`Status synced to ${linkedRefs.length} linked applicant${linkedRefs.length>1?'s':''} ✓`);
+  }
 }
 
 async function loadLinkedReservations(){
