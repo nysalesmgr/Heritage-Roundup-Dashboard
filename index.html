@@ -404,9 +404,9 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <table>
             <thead><tr>
               <th>R#</th><th>Applicant</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
-              <th>Monthly Rent</th><th>Incentives</th><th>Agreement Date</th><th>Payment Due</th><th>Remarks</th><th>Status</th><th></th>
+              <th>Monthly Rent</th><th>Incentives %</th><th>Incentives</th><th>Agreement Date</th><th>Payment Due</th><th>Remarks</th><th>Status</th><th></th>
             </tr></thead>
-            <tbody id="renewals-page-tbody"><tr class="loading-row"><td colspan="12">Loading…</td></tr></tbody>
+            <tbody id="renewals-page-tbody"><tr class="loading-row"><td colspan="13">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1226,6 +1226,7 @@ function renderRenewalsPage(){
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtDate(r.move_in):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtDate(r.move_out):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','monthly_rate','text')"><span class="cell-val${!r.monthly_rate?' empty':''}">${r.monthly_rate||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','incentives_pct','text')"><span class="cell-val${!r.incentives_pct?' empty':''}">${r.incentives_pct||'—'}</span></td>
       <td><span class="cell-val">${calcRenewalIncentive(r)}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','agr_date','date')"><span class="cell-val${!r.agr_date?' empty':''}">${r.agr_date?fmtDate(r.agr_date):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','payment_due','date')"><span class="cell-val${!r.payment_due?' empty':''}">${r.payment_due?fmtDate(r.payment_due):'—'}</span></td>
@@ -1240,6 +1241,13 @@ function renderRenewalsPage(){
 function calcRenewalIncentive(r){
   const rate = parseFloat((r.monthly_rate||'').replace(/[$,]/g,'').trim());
   if(!rate || isNaN(rate)) return '—';
+  const pct = parseFloat((r.incentives_pct||'').replace('%','').trim());
+  if(pct && !isNaN(pct)){
+    // Use percentage of first month rent
+    const amount = Math.round(rate * (pct/100) * 100) / 100;
+    return '$' + amount.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  // Default: first month rent
   return '$' + rate.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
