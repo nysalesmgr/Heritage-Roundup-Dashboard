@@ -1923,13 +1923,6 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
-  // Auto-scan passport or license in background
-  setTimeout(()=>{
-    const docUrl = a.passport_1_url || a.license_url || '';
-    const docLabel = a.passport_1_url ? 'Passport' : 'Driver License';
-    if(docUrl) autoScanDocument(docUrl, docLabel);
-  }, 500);
-
   // Async load — also fetch history from older entries by same name
   const fullName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
   const olderRefs = apps
@@ -1957,9 +1950,7 @@ function openPanel(ref){
 
 function docRow(label, url){
   if(!url) return `<div style="margin-bottom:10px"><div class="il-l">${label}</div><div class="il-v"><span class="muted">Not uploaded</span></div></div>`;
-  const isIdDoc = label.toLowerCase().includes('passport') || label.toLowerCase().includes('license') || label.toLowerCase().includes('id');
-  const scanBtn = isIdDoc ? `<button onclick="scanDocument('${esc(url)}','${esc(label)}')" style="margin-left:8px;font-size:11px;background:var(--navy);color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-family:Inter,sans-serif">🔍 Scan</button>` : '';
-  return `<div style="margin-bottom:10px"><div class="il-l">${label}</div><div class="il-v"><a href="${esc(url)}" target="_blank">View file ↗</a>${scanBtn}</div></div>`;
+  return `<div style="margin-bottom:10px"><div class="il-l">${label}</div><div class="il-v"><a href="${esc(url)}" target="_blank">View file ↗</a></div></div>`;
 }
 
 function closePanel(){
