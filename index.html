@@ -591,15 +591,13 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="isec" id="sec-ny-extra" style="display:none">
         <div class="isec-title">Additional Details</div>
         <div class="igrid">
-          <div><div class="il-l">Applicant Type</div><div class="il-v" id="t-type">—</div></div>
-          <div><div class="il-l">Purpose of Visit</div><div class="il-v" id="t-purpose">—</div></div>
           <div><div class="il-l">Address</div><div class="il-v" id="t-address">—</div></div>
           <div><div class="il-l">Course</div><div class="il-v" id="t-course">—</div></div>
           <div><div class="il-l">How They Found Us</div><div class="il-v" id="t-referral">—</div></div>
           <div><div class="il-l">Passport Number</div><div class="il-v" id="t-passport-num">—</div></div>
           <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
-          <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelField('t-dob','date_of_birth',this)" style="cursor:pointer">—</div></div>
-          <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelField('t-nationality','nationality',this)" style="cursor:pointer">—</div></div>
+          <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelFieldEditable('t-dob','dob',this,'date')" style="cursor:pointer">—</div></div>
+          <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelFieldEditable('t-nationality','nationality',this,'text')" style="cursor:pointer">—</div></div>
         </div>
       </div>
     </div>
@@ -1624,7 +1622,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','updated_at'];
   const raw = { ...editableCache[ref], ref_number: ref, property: currentProperty, updated_at: new Date().toISOString() };
   const payload = {};
   allowed.forEach(k => { if(raw[k] !== undefined) payload[k] = raw[k]; });
@@ -1904,6 +1902,8 @@ function openPanel(ref){
     document.getElementById('t-referral').textContent = a.referral||'—';
     document.getElementById('t-passport-num').textContent = a.passport_number||'—';
     document.getElementById('t-passport-exp').textContent = a.passport_expiry ? fmtDate(a.passport_expiry) : '—';
+    document.getElementById('t-dob').textContent = getNYData(a.ref_number).dob ? fmtDate(getNYData(a.ref_number).dob) : '—';
+    document.getElementById('t-nationality').textContent = getNYData(a.ref_number).nationality || '—';
   }
 
   
@@ -2287,6 +2287,23 @@ async function saveNotes(){  if(!selectedRef) return;
 }
 
 // ── PANEL FIELD EDITING ───────────────────────────────────
+function editPanelFieldEditable(elId, field, el, type){
+  const cur = getNYData(selectedRef)[field] || '';
+  const input = document.createElement('input');
+  input.type = type==='date' ? 'date' : 'text';
+  input.value = cur;
+  input.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
+  el.innerHTML=''; el.appendChild(input); input.focus();
+  const save = () => {
+    const val = input.value.trim();
+    el.innerHTML = val ? (type==='date' ? fmtDate(val) : esc(val)) : '—';
+    setNYData(selectedRef, {[field]: val});
+    toast(`${field} updated ✓`);
+  };
+  input.onblur=save;
+  input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur||'—'; } };
+}
+
 function editPanelField(elId, field, el){
   const a = apps.find(x=>x.ref_number===selectedRef);
   if(!a) return;
