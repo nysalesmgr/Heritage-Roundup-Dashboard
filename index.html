@@ -785,9 +785,11 @@ function parsePassportText(text){
 
 async function autoScanDocument(url, label){
   try {
+    console.log('Scanning:', url);
     const imgRes = await fetch(url);
-    if(!imgRes.ok) return;
+    if(!imgRes.ok){ console.log('Fetch failed:', imgRes.status); return; }
     const blob = await imgRes.blob();
+    console.log('Blob type:', blob.type, 'size:', blob.size);
     const base64 = await new Promise(resolve => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result.split(',')[1]);
@@ -801,7 +803,9 @@ async function autoScanDocument(url, label){
     });
 
     const data = await response.json();
+    console.log('Vision response:', JSON.stringify(data).substring(0,300));
     const text = data.responses?.[0]?.fullTextAnnotation?.text || '';
+    console.log('Extracted text:', text.substring(0,200));
     if(!text) return;
 
     const extracted = parsePassportText(text);
@@ -825,7 +829,7 @@ async function autoScanDocument(url, label){
       fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(selectedRef)}`,{method:'PATCH',headers:{...SB_HEADERS,'Prefer':'return=minimal'},body:JSON.stringify(updates)});
     }
     toast('✓ Document scanned — details updated');
-  } catch(e){ /* silent fail */ }
+  } catch(e){ console.error('Scan error:', e.message, e); }
 }
 
 async function scanDocument(url, label){
