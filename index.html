@@ -1692,22 +1692,9 @@ function editCell(td, ref, field, type){
     const val = input.value;
     setNYData(ref,{[field]:val});
     td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?fmtDate(val):val):'—'}</span>`;
-    // Update commission amount if incentives or rent/dates changed
+    // Update commission amount if relevant fields changed
     if(['incentives','monthly_rent','move_in','move_out','unit'].includes(field)){
-      const row = td.closest('tr');
-      if(row){
-        const a = apps.find(x=>x.ref_number===ref);
-        if(a){
-          const commCells = row.querySelectorAll('td');
-          // Find the commission amount cell (after incentives cell)
-          const commVal = calcCommission(a);
-          const allTds = Array.from(commCells);
-          const incTd = allTds.find(c=>c.querySelector('.cell-val') && c.getAttribute('onclick') && c.getAttribute('onclick').includes("'incentives'"));
-          if(incTd && incTd.nextElementSibling){
-            incTd.nextElementSibling.innerHTML = `<span class="cell-val">${commVal}</span>`;
-          }
-        }
-      }
+      setTimeout(()=>renderTable(), 50);
     }
   };
 
