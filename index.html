@@ -750,6 +750,59 @@ function stopAutoRefresh(){ if(autoRefreshTimer){ clearInterval(autoRefreshTimer
 // ── DOCUMENT SCANNING (Claude Vision) ────────────────────
 let scanExtracted = {};
 
+async function autoScanDocument(url, label){
+  try {
+    const imgRes = await fetch(url);
+    const blob = await imgRes.blob();
+    const base64 = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+    const mediaType = blob.type || 'image/jpeg';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: 'Extract details from this identity document. Return ONLY a JSON object: {"full_name":"","first_name":"","last_name":"","document_number":"","expiry_date":"YYYY-MM-DD","date_of_birth":"YYYY-MM-DD","nationality":"","gender":""}. Use null if not found. No other text.' }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const extracted = JSON.parse(text.replace(/```json|```/g,'').trim());
+    if(!extracted || (!extracted.first_name && !extracted.document_number)) return;
+
+    const a = apps.find(x=>x.ref_number===selectedRef);
+    if(!a) return;
+
+    // Auto-apply extracted details
+    if(extracted.first_name){ a.first_name=extracted.first_name; const el=document.getElementById('t-first'); if(el) el.textContent=extracted.first_name; }
+    if(extracted.last_name){  a.last_name=extracted.last_name;   const el=document.getElementById('t-last');  if(el) el.textContent=extracted.last_name; }
+    if(extracted.document_number){ const el=document.getElementById('t-passport-num'); if(el) el.textContent=extracted.document_number; }
+    if(extracted.expiry_date){     const el=document.getElementById('t-passport-exp'); if(el) el.textContent=fmtDate(extracted.expiry_date); }
+
+    // Save to Supabase
+    const table = a._source==='Booking Engine' ? 'applications' : 'formsite_submissions';
+    const updates = {};
+    if(extracted.first_name) updates.first_name = extracted.first_name;
+    if(extracted.last_name)  updates.last_name  = extracted.last_name;
+    if(Object.keys(updates).length){
+      fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(selectedRef)}`,{method:'PATCH',headers:{...SB_HEADERS,'Prefer':'return=minimal'},body:JSON.stringify(updates)});
+    }
+    toast('✓ Document scanned — details updated');
+  } catch(e){ /* silent fail */ }
+}
+
 async function scanDocument(url, label){
   scanExtracted = {};
   document.getElementById('scan-modal').style.display = 'flex';
@@ -1881,6 +1934,13 @@ function openPanel(ref){
   switchTab('licensee');
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
+
+  // Auto-scan passport or license in background
+  setTimeout(()=>{
+    const docUrl = a.passport_1_url || a.license_url || '';
+    const docLabel = a.passport_1_url ? 'Passport' : 'Driver License';
+    if(docUrl) autoScanDocument(docUrl, docLabel);
+  }, 500);
 
   // Async load — also fetch history from older entries by same name
   const fullName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
