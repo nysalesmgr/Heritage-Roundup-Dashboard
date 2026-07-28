@@ -823,7 +823,7 @@ async function autoScanDocument(url, label){
     if(extracted.date_of_birth){   const el=document.getElementById('t-dob');          if(el) el.textContent=fmtDate(extracted.date_of_birth); }
     if(extracted.nationality){     const el=document.getElementById('t-nationality');   if(el) el.textContent=extracted.nationality; }
 
-    const table = a._source==='Booking Engine'||a._source==='NY Summer Booking Engine' ? 'applications' : 'formsite_submissions';
+    const table = a._table==='applications' ? 'applications' : 'formsite_submissions';
     const updates = {};
     if(extracted.first_name) updates.first_name = extracted.first_name;
     if(extracted.last_name)  updates.last_name  = extracted.last_name;
@@ -883,7 +883,7 @@ function applyScanResults(){
   if(scanExtracted.expiry_date)     document.getElementById('t-passport-exp').textContent=fmtDate(scanExtracted.expiry_date);
   if(scanExtracted.date_of_birth)   document.getElementById('t-dob').textContent=fmtDate(scanExtracted.date_of_birth);
   if(scanExtracted.nationality)     document.getElementById('t-nationality').textContent=scanExtracted.nationality;
-  const table = a?._source==='Booking Engine' ? 'applications' : 'formsite_submissions';
+  const table = a?._table==='applications' ? 'applications' : 'formsite_submissions';
   const updates = {};
   if(scanExtracted.first_name) updates.first_name = scanExtracted.first_name;
   if(scanExtracted.last_name)  updates.last_name  = scanExtracted.last_name;
@@ -954,7 +954,7 @@ async function loadApps(showMsg){
 async function loadBostonApps(){
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/applications?select=*&order=created_at.desc', { headers: SB_HEADERS });
-    if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push({...r,_source:r.source_override||'Booking Engine',_property:'boston'})); }
+    if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push({...r,_source:r.source_override||'Booking Engine',_property:'boston',_table:'applications'})); }
   } catch(e){ console.error('Supabase error:', e); }
 
   try {
@@ -1001,6 +1001,7 @@ async function loadNYApps(){
           internship_url:occ[0]?.internship_offer_url||'',
           _source:       'NY Summer Booking Engine',
           _property:     'newyork',
+          _table:        'ny_summer_booking_engine',
         };
         apps.push(app);
         // Auto-fill editable fields if not already set
@@ -1068,6 +1069,7 @@ function normalizeSupabaseFormsite(row){
     visa_1_url:     raw['59'] || '',
     _source:   source.includes('Domestic') ? 'Domestic' : 'International',
     _property: property,
+    _table:    'formsite_submissions',
   };
   // Auto-save move-in, move-out and source to editable_data if not already set
   const cached = editableCache[ref] || {};
@@ -2078,12 +2080,17 @@ async function setStatus(ref, newStatus){
   const a = apps.find(x=>x.ref_number===ref);
   if(!a) return;
 
-  if(a._source === 'Booking Engine'){
+  if(a._table === 'applications'){
     const res = await fetch(SUPABASE_URL + '/rest/v1/applications?ref_number=eq.' + encodeURIComponent(ref), {
       method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ status: newStatus })
     });
     if(!res.ok){ toast('Update failed — check Supabase RLS'); return; }
+  } else if(a._table === 'ny_summer_booking_engine'){
+    await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?ref_number=eq.' + encodeURIComponent(ref), {
+      method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ status: newStatus })
+    });
   } else {
     setNYStatus(ref, newStatus);
   }
@@ -2116,7 +2123,7 @@ async function setStatus(ref, newStatus){
     for(const linkedRef of linkedRefs){
       const la = apps.find(x=>x.ref_number===linkedRef);
       if(!la || la.status===newStatus) continue;
-      if(la._source==='Booking Engine'){
+      if(la._table==='applications'){
         await fetch(SUPABASE_URL+'/rest/v1/applications?ref_number=eq.'+encodeURIComponent(linkedRef),{
           method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
           body: JSON.stringify({status: newStatus})
@@ -2229,7 +2236,7 @@ async function applyLinkedStatus(){
   for(const ref of checked){
     const a = apps.find(x=>x.ref_number===ref);
     if(!a) continue;
-    if(a._source==='Booking Engine'){
+    if(a._table==='applications'){
       await fetch(SUPABASE_URL+'/rest/v1/applications?ref_number=eq.'+encodeURIComponent(ref),{
         method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
         body: JSON.stringify({status: newStatus})
@@ -2393,7 +2400,7 @@ function editPanelField(elId, field, el){
     a[field] = val;
     const display = val ? (isDate ? fmtDate(val) : field==='email' ? `<a href="mailto:${esc(val)}">${esc(val)}</a>` : esc(val)) : '—';
     el.innerHTML = display;
-    const table = a._source==='Booking Engine'||a._source==='NY Summer Booking Engine' ? 'applications' : 'formsite_submissions';
+    const table = a._table==='applications' ? 'applications' : 'formsite_submissions';
     await fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(selectedRef)}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body: JSON.stringify({[field]: val})
