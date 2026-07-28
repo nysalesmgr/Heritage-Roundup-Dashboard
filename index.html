@@ -599,6 +599,8 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">How They Found Us</div><div class="il-v" id="t-referral">—</div></div>
           <div><div class="il-l">Passport Number</div><div class="il-v" id="t-passport-num">—</div></div>
           <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
+          <div><div class="il-l">Date of Birth</div><div class="il-v" id="t-dob">—</div></div>
+          <div><div class="il-l">Nationality</div><div class="il-v" id="t-nationality">—</div></div>
         </div>
       </div>
     </div>
@@ -790,6 +792,8 @@ async function autoScanDocument(url, label){
     if(extracted.last_name){  a.last_name=extracted.last_name;   const el=document.getElementById('t-last');  if(el) el.textContent=extracted.last_name; }
     if(extracted.document_number){ const el=document.getElementById('t-passport-num'); if(el) el.textContent=extracted.document_number; }
     if(extracted.expiry_date){     const el=document.getElementById('t-passport-exp'); if(el) el.textContent=fmtDate(extracted.expiry_date); }
+    if(extracted.date_of_birth){ const el=document.getElementById('t-dob'); if(el) el.textContent=fmtDate(extracted.date_of_birth); }
+    if(extracted.nationality){   const el=document.getElementById('t-nationality'); if(el) el.textContent=extracted.nationality; }
 
     // Save to Supabase
     const table = a._source==='Booking Engine' ? 'applications' : 'formsite_submissions';
@@ -859,6 +863,8 @@ function applyScanResults(){
   if(scanExtracted.last_name){  if(a) a.last_name=scanExtracted.last_name;   document.getElementById('t-last').textContent=scanExtracted.last_name; }
   if(scanExtracted.document_number) document.getElementById('t-passport-num').textContent=scanExtracted.document_number;
   if(scanExtracted.expiry_date)     document.getElementById('t-passport-exp').textContent=fmtDate(scanExtracted.expiry_date);
+  if(scanExtracted.date_of_birth)   document.getElementById('t-dob').textContent=fmtDate(scanExtracted.date_of_birth);
+  if(scanExtracted.nationality)     document.getElementById('t-nationality').textContent=scanExtracted.nationality;
   const table = a?._source==='Booking Engine' ? 'applications' : 'formsite_submissions';
   const updates = {};
   if(scanExtracted.first_name) updates.first_name = scanExtracted.first_name;
