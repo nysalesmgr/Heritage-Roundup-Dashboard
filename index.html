@@ -1798,13 +1798,31 @@ function renderPanelViewingDates(ref){
 }
 
 function getUtilitiesFee(unit){
-  const u = (unit||'').toLowerCase();
-  // Private room: ends in L or R (e.g. 4FL, 4FR)
-  if(/[lr]$/i.test((unit||'').trim())) return 170;
+  const u = (unit||'').trim();
+  // Private room: exactly 3-char suffix ending in L or R (e.g. 4FL, 4FR)
+  const suffix = u.split(' ').pop();
+  if(/^[A-Z0-9]{2}[LR]$/i.test(suffix)) return 170;
   // 4 bedroom
-  if(u.includes('4br')||u.includes('4 bed')||u.includes('4bedroom')||u.includes('four bed')) return 680;
+  const ul = u.toLowerCase();
+  if(ul.includes('4br')||ul.includes('4 bed')||ul.includes('4bedroom')||ul.includes('four bed')) return 680;
   // Studio, 1BR, 2BR, 3BR
   return 340;
+}
+
+function calcMonths(moveIn, moveOut){
+  const inDate  = new Date(moveIn+'T00:00:00');
+  const outDate = new Date(moveOut+'T00:00:00');
+  let months = 0;
+  let cur = new Date(inDate);
+  while(cur < outDate){
+    const daysInMonth = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+    const monthEnd = new Date(cur.getFullYear(), cur.getMonth()+1, 0);
+    const periodEnd = outDate < monthEnd ? outDate : monthEnd;
+    const days = (periodEnd - cur) / (1000*60*60*24) + (outDate <= monthEnd ? 1 : 0);
+    months += days / daysInMonth;
+    cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+  }
+  return months;
 }
 
 function calcCommission(a){
@@ -1816,10 +1834,7 @@ function calcCommission(a){
   const rate    = parseFloat((d.monthly_rent || a.monthly_rate || '').replace(/[$,]/g,'').trim());
   if(!moveIn || !moveOut || !rate || isNaN(rate)) return '—';
 
-  // Calculate months
-  const inDate  = new Date(moveIn+'T12:00:00');
-  const outDate = new Date(moveOut+'T12:00:00');
-  const months  = (outDate.getFullYear() - inDate.getFullYear()) * 12 + (outDate.getMonth() - inDate.getMonth());
+  const months     = calcMonths(moveIn, moveOut);
   if(months <= 0) return '—';
 
   const unit       = d.unit || a.apartment || '';
