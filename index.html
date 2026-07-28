@@ -1240,15 +1240,10 @@ function renderRenewalsPage(){
 
 function calcRenewalIncentive(r){
   const rate = parseFloat((r.monthly_rate||'').replace(/[$,]/g,'').trim());
-  if(!rate || isNaN(rate)) return '—';
   const pct = parseFloat((r.incentives_pct||'').replace('%','').trim());
-  if(pct && !isNaN(pct)){
-    // Use percentage of first month rent
-    const amount = Math.round(rate * (pct/100) * 100) / 100;
-    return '$' + amount.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  }
-  // Default: first month rent
-  return '$' + rate.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  if(!rate || isNaN(rate) || !pct || isNaN(pct)) return '—';
+  const amount = Math.round(rate * (pct/100) * 100) / 100;
+  return '$' + amount.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
 function renderRenewals(){
