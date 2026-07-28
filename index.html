@@ -375,7 +375,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
             <span class="fc" id="filter-count"></span>
           </div>
           <table>
-            <thead><tr><th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+            <thead><tr><th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
             <tbody id="apps-tbody"><tr class="loading-row"><td colspan="14">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -416,7 +416,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Drop</div><div class="ps-sub">To Drop & Drop Out applications</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
           <tbody id="drop-tbody"><tr class="loading-row"><td colspan="14">No dropped applications</td></tr></tbody>
         </table>
       </div></div>
@@ -427,7 +427,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Completed</div><div class="ps-sub">Payment Received / Finalized</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
           <tbody id="completed-tbody"><tr class="loading-row"><td colspan="15">No completed applications</td></tr></tbody>
         </table>
       </div></div>
@@ -1462,6 +1462,7 @@ function appRow(a, showReservation=false){
     ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : (a.formsite_moveout||''))}
     ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
     ${nyCell(a.ref_number,'incentives','text')}
+    <td><span class="cell-val">${calcCommission(a)}</span></td>
     ${multiDateCell(a.ref_number,'vmu')}
     ${multiDateCell(a.ref_number,'ipt')}
     ${nyCell(a.ref_number,'student_status','student')}
@@ -1616,7 +1617,7 @@ function getNYData(ref){ return editableCache[ref] || {}; }
 
 const FIELD_LABELS = {
   unit:'Unit', move_in:'Move-in', move_out:'Move-out', monthly_rent:'Monthly Rent',
-  incentives:'Incentives %', vmu:'VMU Date', ipt:'IPT Date', student_status:'Student Status',
+  incentives:'Commission %', vmu:'VMU Date', ipt:'IPT Date', student_status:'Student Status',
   prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source',
   reservation_no:'Reservation #', agr_date:'Agreement Date', payment_due:'Payment Due', remarks:'Remarks'
 };
@@ -1779,6 +1780,40 @@ function renderPanelViewingDates(ref){
   });
 }
 
+function getUtilitiesFee(unit){
+  const u = (unit||'').toLowerCase();
+  // Private room: ends in L or R (e.g. 4FL, 4FR)
+  if(/[lr]$/i.test((unit||'').trim())) return 170;
+  // 4 bedroom
+  if(u.includes('4br')||u.includes('4 bed')||u.includes('4bedroom')||u.includes('four bed')) return 680;
+  // Studio, 1BR, 2BR, 3BR
+  return 340;
+}
+
+function calcCommission(a){
+  const d = getNYData(a.ref_number);
+  const commPct = parseFloat((d.incentives||'').replace('%','').trim());
+  if(!commPct || isNaN(commPct)) return '—';
+  const moveIn  = d.move_in  || a.start_date || a.formsite_movein  || '';
+  const moveOut = d.move_out || a.end_date   || a.formsite_moveout || '';
+  const rate    = parseFloat((d.monthly_rent || a.monthly_rate || '').replace(/[$,]/g,'').trim());
+  if(!moveIn || !moveOut || !rate || isNaN(rate)) return '—';
+
+  // Calculate months
+  const inDate  = new Date(moveIn+'T12:00:00');
+  const outDate = new Date(moveOut+'T12:00:00');
+  const months  = (outDate.getFullYear() - inDate.getFullYear()) * 12 + (outDate.getMonth() - inDate.getMonth());
+  if(months <= 0) return '—';
+
+  const unit       = d.unit || a.apartment || '';
+  const utilities  = getUtilitiesFee(unit);
+  const totalRent  = rate * months;
+  const totalUtil  = utilities * months;
+  const commission = (totalRent - totalUtil) * (commPct / 100);
+
+  return '$' + commission.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
 function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
   const val = cached[field]||(fallback||'');
@@ -1830,7 +1865,7 @@ function renderTable(){
 
   document.querySelector('#view-applications thead tr').innerHTML = `
     <th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
-    <th>Monthly Rent</th><th>Incentives %</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th>`;
+    <th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th>`;
 
   tbody.innerHTML = filtered.map(a=>appRow(a)).join('');
 }
