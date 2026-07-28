@@ -1445,11 +1445,11 @@ function renderCompletedPage(){
 }
 
 function appRow(a, showReservation=false){
-  return `<tr>
+  return `<tr onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">
     <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
-    <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">${badge(a.status)}</td>
+    <td>${badge(a.status)}</td>
     ${nyCell(a.ref_number,'season','season')}
-    <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer${isBlacklisted(a.first_name,a.last_name,a.email)?';background:var(--rej-bg)':''}">
+    <td>
       <div class="td-name" style="${isBlacklisted(a.first_name,a.last_name,a.email)?'color:var(--rej)':''}">
         ${isBlacklisted(a.first_name,a.last_name,a.email)?'🚫 ':''}${isLinked(a.ref_number)?'🔗 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
       </div>
@@ -1708,7 +1708,7 @@ function multiDateCell(ref, field){
   const raw = getNYData(ref)[field] || '';
   const dates = raw.split('\n').map(d=>d.trim()).filter(Boolean);
   const display = dates.length ? dates.map(d=>fmtDate(d)).join('<br>') : '—';
-  return `<td class="editable-cell" onclick="openMultiDateEditor('${esc(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
+  return `<td class="editable-cell" onclick="event.stopPropagation();openMultiDateEditor('${esc(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
 }
 
 function openMultiDateEditor(ref, field, td){
@@ -1783,7 +1783,7 @@ function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
   const val = cached[field]||(fallback||'');
   const display = val && val!=='—' ? (type==='date' ? fmtDate(val) : val) : '—';
-  return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${display}</span></td>`;
+  return `<td class="editable-cell" onclick="event.stopPropagation();editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${display}</span></td>`;
 }
 
 // ── APPLICATIONS TABLE ────────────────────────────────────
