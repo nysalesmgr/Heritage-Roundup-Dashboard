@@ -598,8 +598,8 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">How They Found Us</div><div class="il-v" id="t-referral">—</div></div>
           <div><div class="il-l">Passport Number</div><div class="il-v" id="t-passport-num">—</div></div>
           <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
-          <div><div class="il-l">Date of Birth</div><div class="il-v" id="t-dob">—</div></div>
-          <div><div class="il-l">Nationality</div><div class="il-v" id="t-nationality">—</div></div>
+          <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelField('t-dob','date_of_birth',this)" style="cursor:pointer">—</div></div>
+          <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelField('t-nationality','nationality',this)" style="cursor:pointer">—</div></div>
         </div>
       </div>
     </div>
@@ -2291,26 +2291,27 @@ function editPanelField(elId, field, el){
   const a = apps.find(x=>x.ref_number===selectedRef);
   if(!a) return;
   const cur = a[field]||'';
+  const isDate = field==='date_of_birth' || field==='expiry_date';
   const input = document.createElement('input');
-  input.type='text'; input.value=cur;
+  input.type = isDate ? 'date' : 'text';
+  input.value = cur;
   input.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
   el.innerHTML=''; el.appendChild(input); input.focus();
   const save = async () => {
     const val = input.value.trim();
     a[field] = val;
-    el.innerHTML = val ? `<a href="mailto:${esc(val)}">${esc(val)}</a>` : '—';
-    // Save to Supabase
-    const table = a._source==='Booking Engine' ? 'applications' : 'formsite_submissions';
-    const key = a._source==='Booking Engine' ? 'ref_number' : 'ref_number';
+    const display = val ? (isDate ? fmtDate(val) : field==='email' ? `<a href="mailto:${esc(val)}">${esc(val)}</a>` : esc(val)) : '—';
+    el.innerHTML = display;
+    const table = a._source==='Booking Engine'||a._source==='NY Summer Booking Engine' ? 'applications' : 'formsite_submissions';
     await fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(selectedRef)}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body: JSON.stringify({[field]: val})
     });
-    await insertHistory(selectedRef, 'field', `✏️ Email: "${cur}" → "${val}"`);
-    toast('Email updated ✓');
+    await insertHistory(selectedRef, 'field', `✏️ ${field}: "${cur}" → "${val}"`);
+    toast(`${field.replace(/_/g,' ')} updated ✓`);
   };
   input.onblur=save;
-  input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?`<a href="mailto:${esc(cur)}">${esc(cur)}</a>`:'—'; } };
+  input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
 function openRmsModal(){ document.getElementById('rms-modal').classList.add('on'); }
 function closeRmsModal(){ document.getElementById('rms-modal').classList.remove('on'); }
