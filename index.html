@@ -1798,19 +1798,21 @@ function getUtilitiesFee(unit){
 }
 
 function calcMonths(moveIn, moveOut){
-  const inDate  = new Date(moveIn+'T00:00:00');
-  const outDate = new Date(moveOut+'T00:00:00');
+  const parts1 = moveIn.split('-').map(Number);
+  const parts2 = moveOut.split('-').map(Number);
+  const inDate  = new Date(Date.UTC(parts1[0], parts1[1]-1, parts1[2]));
+  const outDate = new Date(Date.UTC(parts2[0], parts2[1]-1, parts2[2]));
   let months = 0;
-  let cur = new Date(inDate);
-  while(cur <= outDate){
-    const year = cur.getFullYear();
-    const month = cur.getMonth();
-    const daysInMonth = new Date(year, month+1, 0).getDate();
-    const monthEnd = new Date(year, month+1, 0);
-    const periodEnd = outDate < monthEnd ? outDate : monthEnd;
-    const days = (periodEnd - cur) / (1000*60*60*24) + 1; // +1 for inclusive count
-    months += days / daysInMonth;
-    cur = new Date(year, month+1, 1);
+  let curYear = parts1[0], curMonth = parts1[1]-1, curDay = parts1[2];
+  while(true){
+    const daysInMonth = new Date(Date.UTC(curYear, curMonth+1, 0)).getUTCDate();
+    const lastDay = daysInMonth;
+    const endDay  = (curYear===parts2[0] && curMonth===parts2[1]-1) ? parts2[2] : lastDay;
+    months += (endDay - curDay + 1) / daysInMonth;
+    if(curYear===parts2[0] && curMonth===parts2[1]-1) break;
+    curMonth++;
+    if(curMonth > 11){ curMonth=0; curYear++; }
+    curDay = 1;
   }
   return months;
 }
