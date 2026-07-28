@@ -595,7 +595,6 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">Purpose of Visit</div><div class="il-v" id="t-purpose">—</div></div>
           <div><div class="il-l">Address</div><div class="il-v" id="t-address">—</div></div>
           <div><div class="il-l">Course</div><div class="il-v" id="t-course">—</div></div>
-          <div><div class="il-l">Employer</div><div class="il-v" id="t-employer">—</div></div>
           <div><div class="il-l">How They Found Us</div><div class="il-v" id="t-referral">—</div></div>
           <div><div class="il-l">Passport Number</div><div class="il-v" id="t-passport-num">—</div></div>
           <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
@@ -1902,7 +1901,6 @@ function openPanel(ref){
     document.getElementById('t-purpose').textContent  = a.purpose||'—';
     document.getElementById('t-address').textContent  = a.address||'—';
     document.getElementById('t-course').textContent   = a.course||'—';
-    document.getElementById('t-employer').textContent = a.employer||'—';
     document.getElementById('t-referral').textContent = a.referral||'—';
     document.getElementById('t-passport-num').textContent = a.passport_number||'—';
     document.getElementById('t-passport-exp').textContent = a.passport_expiry ? fmtDate(a.passport_expiry) : '—';
