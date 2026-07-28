@@ -1801,13 +1801,15 @@ function calcMonths(moveIn, moveOut){
   const outDate = new Date(moveOut+'T00:00:00');
   let months = 0;
   let cur = new Date(inDate);
-  while(cur < outDate){
-    const daysInMonth = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
-    const monthEnd = new Date(cur.getFullYear(), cur.getMonth()+1, 0);
+  while(cur <= outDate){
+    const year = cur.getFullYear();
+    const month = cur.getMonth();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const monthEnd = new Date(year, month+1, 0);
     const periodEnd = outDate < monthEnd ? outDate : monthEnd;
-    const days = (periodEnd - cur) / (1000*60*60*24) + (outDate <= monthEnd ? 1 : 0);
+    const days = (periodEnd - cur) / (1000*60*60*24) + 1; // +1 for inclusive count
     months += days / daysInMonth;
-    cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+    cur = new Date(year, month+1, 1);
   }
   return months;
 }
