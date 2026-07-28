@@ -1830,7 +1830,7 @@ function calcCommission(a){
   const utilities  = getUtilitiesFee(unit);
   const totalRent  = rate * months;
   const totalUtil  = utilities * months;
-  const commission = (totalRent - totalUtil) * (commPct / 100);
+  const commission = Math.round((totalRent - totalUtil) * (commPct / 100) * 100) / 100;
 
   return '$' + commission.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
