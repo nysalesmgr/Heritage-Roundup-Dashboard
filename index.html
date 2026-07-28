@@ -1868,7 +1868,7 @@ function openPanel(ref){
 
   // Build tabs dynamically
   const tabNames = ['licensee','booking','documents','remarks','notes'];
-  const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', remarks: 'Remarks', notes: 'Notes & History' };
+  const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', remarks: 'VMU/IPT Remarks', notes: 'History' };
   document.getElementById('pan-tabs').innerHTML = tabNames.map((t,i)=>`<div class="ptab${i===0?' on':''}" onclick="switchTab('${t}')">${tabLabels[t]}</div>`).join('');
 
   // Licensee tab
