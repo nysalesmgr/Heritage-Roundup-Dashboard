@@ -2460,20 +2460,28 @@ function editPanelField(elId, field, el){
   input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
 // ── RMS CLOUD INTEGRATION ────────────────────────────────
-async function rmsGetToken(){
-  if(rmsToken) return rmsToken;
-  const res = await fetch(`${RMS_BASE}/authToken`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({agentId: RMS_AGENT_ID, agentPassword: RMS_AGENT_PWD})
-  });
-  if(!res.ok) throw new Error('Auth failed: ' + res.status);
-  const data = await res.json();
-  rmsToken = data.token || data.authToken || data;
-  return rmsToken;
+const RMS_PROXY = `${SUPABASE_URL}/functions/v1/rms-proxy`;
+
+async function rmsCall(path, method='GET', token='', body=null){
+  const headers = {
+    'Content-Type': 'application/json',
+    'apikey': SUPABASE_KEY,
+    'x-rms-path': path,
+    'x-rms-method': method,
+  };
+  if(token) headers['x-rms-token'] = token;
+  const opts = { method: 'POST', headers };
+  if(body) opts.body = JSON.stringify(body);
+  const res = await fetch(RMS_PROXY, opts);
+  if(!res.ok) throw new Error(`RMS ${method} ${path} failed: ${res.status}`);
+  return res.json();
 }
 
-function rmsHeaders(token){
-  return {'Content-Type':'application/json', 'authToken': token};
+async function rmsGetToken(){
+  if(rmsToken) return rmsToken;
+  const data = await rmsCall('/authToken', 'POST', '', {agentId: RMS_AGENT_ID, agentPassword: RMS_AGENT_PWD});
+  rmsToken = data.token || data.authToken || data;
+  return rmsToken;
 }
 
 async function openRmsModal(){
@@ -2489,8 +2497,7 @@ async function openRmsModal(){
     const token = await rmsGetToken();
 
     // Load properties
-    const propRes = await fetch(`${RMS_BASE}/properties?modelType=basic`, { headers: rmsHeaders(token) });
-    const properties = await propRes.json();
+    const properties = await rmsCall('/properties?modelType=basic', 'GET', token);
     const propSel = document.getElementById('rms-property');
     propSel.innerHTML = '<option value="">Select property…</option>';
     (Array.isArray(properties) ? properties : properties.result||[]).forEach(p=>{
@@ -2532,8 +2539,7 @@ async function rmsLoadCategories(){
   if(!propId) return;
   try{
     const token = await rmsGetToken();
-    const res = await fetch(`${RMS_BASE}/categories?modelType=basic`, { headers: rmsHeaders(token) });
-    const cats = await res.json();
+    const cats = await rmsCall('/categories?modelType=basic', 'GET', token);
     const catSel = document.getElementById('rms-category');
     catSel.innerHTML = '<option value="">Select category…</option>';
     (Array.isArray(cats) ? cats : cats.result||[]).forEach(c=>{
@@ -2546,30 +2552,23 @@ async function rmsLoadCategories(){
 
 async function rmsSearchOrCreateGuest(token, applicant){
   // Search first
-  const searchRes = await fetch(`${RMS_BASE}/guests/search?modelType=basic`, {
-    method:'POST', headers: rmsHeaders(token),
-    body: JSON.stringify({ email: applicant.email, given: applicant.first_name, surname: applicant.last_name })
-  });
-  const searchData = await searchRes.json();
+  const searchData = await rmsCall('/guests/search?modelType=basic', 'POST', token,
+    { email: applicant.email, given: applicant.first_name, surname: applicant.last_name });
   const results = Array.isArray(searchData) ? searchData : searchData.result||[];
   if(results.length > 0) return results[0].id;
 
   // Create new guest
   const d = getNYData(applicant.ref_number);
-  const createRes = await fetch(`${RMS_BASE}/guests`, {
-    method:'POST', headers: rmsHeaders(token),
-    body: JSON.stringify({
-      given:       applicant.first_name||'',
-      surname:     applicant.last_name||'',
-      email:       applicant.email||'',
-      mobile:      applicant.phone||'',
-      passportNo:  applicant.passport_number || d.passport_number || '',
-      nationality: d.nationality||'',
-      birthDate:   d.dob||'',
-      university:  applicant.college||''
-    })
+  const guest = await rmsCall('/guests', 'POST', token, {
+    given:       applicant.first_name||'',
+    surname:     applicant.last_name||'',
+    email:       applicant.email||'',
+    mobile:      applicant.phone||'',
+    passportNo:  applicant.passport_number || d.passport_number || '',
+    nationality: d.nationality||'',
+    birthDate:   d.dob||'',
+    university:  applicant.college||''
   });
-  const guest = await createRes.json();
   return guest.id || guest.guestId;
 }
 
@@ -2620,11 +2619,7 @@ async function rmsCreateReservation(){
     };
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
 
-    const resRes = await fetch(`${RMS_BASE}/reservations`, {
-      method:'POST', headers: rmsHeaders(token),
-      body: JSON.stringify(resPayload)
-    });
-    const reservation = await resRes.json();
+    const reservation = await rmsCall('/reservations', 'POST', token, resPayload);
     const resId = reservation.id || reservation.reservationId;
 
     // Save reservation ID back to dashboard
