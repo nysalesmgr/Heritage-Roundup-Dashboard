@@ -653,12 +653,52 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 
 <!-- RMS MODAL -->
 <div id="rms-modal">
-  <div class="rms-card">
-    <div class="rms-icon">🔗</div>
-    <div class="rms-title">RMS Cloud Integration</div>
-    <div class="rms-txt">Awaiting API credentials for the Boston property.</div>
-    <div class="rms-sub">Once RMS Cloud provides API credentials, this button will automatically create a reservation with all Licensee data pre-filled — eliminating manual re-entry.</div>
-    <button class="rms-ok" onclick="closeRmsModal()">Got it</button>
+  <div class="rms-card" style="width:580px;max-width:95%;max-height:85vh;overflow-y:auto;padding:28px 32px">
+    <div class="rms-title">⬡ Create in RMS Cloud</div>
+    <div id="rms-status" style="font-size:12px;color:var(--t3);margin-bottom:16px">Connecting to RMS…</div>
+
+    <div id="rms-form" style="display:none">
+      <!-- Property & Category -->
+      <div class="igrid" style="gap:12px;margin-bottom:16px">
+        <div>
+          <div class="il-l">Property *</div>
+          <select id="rms-property" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" onchange="rmsLoadCategories()">
+            <option value="">Select property…</option>
+          </select>
+        </div>
+        <div>
+          <div class="il-l">Category (Room Type) *</div>
+          <select id="rms-category" class="notes-area" style="min-height:0;padding:7px 10px;width:100%">
+            <option value="">Select category…</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Applicant summary -->
+      <div style="background:#F8F9FC;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+        <div style="font-weight:600;margin-bottom:8px;color:var(--navy)">Applicant Details</div>
+        <div id="rms-applicant-summary"></div>
+      </div>
+
+      <!-- Linked applicant -->
+      <div id="rms-linked-section" style="display:none;background:#EEF2FF;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+        <div style="font-weight:600;margin-bottom:8px;color:#3730A3">🔗 Linked Applicant — Separate Profile Will Be Created</div>
+        <div id="rms-linked-summary"></div>
+      </div>
+
+      <!-- Notes -->
+      <div style="margin-bottom:16px">
+        <div class="il-l">Reservation Notes</div>
+        <textarea id="rms-notes" class="notes-area" style="min-height:60px;padding:7px 10px" placeholder="Optional notes…"></textarea>
+      </div>
+
+      <div class="l-err" id="rms-err" style="margin-bottom:10px"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="closeRmsModal()" style="background:#F4F2EE;border:1px solid var(--border);border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">Cancel</button>
+        <button onclick="rmsCreateReservation()" id="rms-submit-btn" class="notes-save-btn" style="margin:0;padding:8px 20px;font-size:12px">Create Reservation</button>
+      </div>
+    </div>
   </div>
 </div>
 <div id="toast"></div>
@@ -669,6 +709,10 @@ const SUPABASE_URL = 'https://gldccgiydcbcgmbpgtnh.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsZGNjZ2l5ZGNiY2dtYnBndG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzOTUxNzMsImV4cCI6MjA5Nzk3MTE3M30.Kfz2RPOp4S15hXvwPOfpMZPnmuIoA211a_YsmQDtSck';
 const SB_HEADERS = {'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY};
 const GOOGLE_VISION_KEY = 'AIzaSyAkoK7mZOBCZiC_QemLaDPOxjSXeT0BAxA';
+const RMS_BASE = 'https://restapi9.rmscloud.cn';
+const RMS_AGENT_ID = 1350;
+const RMS_AGENT_PWD = 'xZkvvnb4bq?';
+let rmsToken = null;
 
 
 // ── STATE ────────────────────────────────────────────────
@@ -2415,8 +2459,192 @@ function editPanelField(elId, field, el){
   input.onblur=save;
   input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
-function openRmsModal(){ document.getElementById('rms-modal').classList.add('on'); }
-function closeRmsModal(){ document.getElementById('rms-modal').classList.remove('on'); }
+// ── RMS CLOUD INTEGRATION ────────────────────────────────
+async function rmsGetToken(){
+  if(rmsToken) return rmsToken;
+  const res = await fetch(`${RMS_BASE}/authToken`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({agentId: RMS_AGENT_ID, agentPassword: RMS_AGENT_PWD})
+  });
+  if(!res.ok) throw new Error('Auth failed: ' + res.status);
+  const data = await res.json();
+  rmsToken = data.token || data.authToken || data;
+  return rmsToken;
+}
+
+function rmsHeaders(token){
+  return {'Content-Type':'application/json', 'authToken': token};
+}
+
+async function openRmsModal(){
+  document.getElementById('rms-modal').classList.add('on');
+  document.getElementById('rms-form').style.display = 'none';
+  document.getElementById('rms-status').textContent = 'Connecting to RMS…';
+  document.getElementById('rms-err').textContent = '';
+
+  const a = apps.find(x=>x.ref_number===selectedRef);
+  if(!a){ document.getElementById('rms-status').textContent = 'No applicant selected.'; return; }
+
+  try {
+    const token = await rmsGetToken();
+
+    // Load properties
+    const propRes = await fetch(`${RMS_BASE}/properties?modelType=basic`, { headers: rmsHeaders(token) });
+    const properties = await propRes.json();
+    const propSel = document.getElementById('rms-property');
+    propSel.innerHTML = '<option value="">Select property…</option>';
+    (Array.isArray(properties) ? properties : properties.result||[]).forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = p.name||p.id;
+      propSel.appendChild(opt);
+    });
+
+    // Show applicant summary
+    const d = getNYData(a.ref_number);
+    document.getElementById('rms-applicant-summary').innerHTML = `
+      <div><strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong> · ${esc(a.email||'—')}</div>
+      <div style="color:var(--t3);margin-top:4px">Move-in: ${fmtDate(d.move_in||a.start_date||'')} · Move-out: ${fmtDate(d.move_out||a.end_date||'')} · Unit: ${esc(d.unit||'—')}</div>
+    `;
+
+    // Check for linked applicants
+    const linkedRefs = getLinkedRefs(a.ref_number);
+    const linkedSection = document.getElementById('rms-linked-section');
+    if(linkedRefs.length){
+      const la = apps.find(x=>x.ref_number===linkedRefs[0]);
+      if(la){
+        document.getElementById('rms-linked-summary').innerHTML = `
+          <div><strong>${esc(la.first_name||'')} ${esc(la.last_name||'')}</strong> · ${esc(la.email||'—')}</div>
+        `;
+        linkedSection.style.display = 'block';
+      }
+    } else { linkedSection.style.display = 'none'; }
+
+    document.getElementById('rms-status').textContent = 'Connected ✓ — fill in details below';
+    document.getElementById('rms-form').style.display = 'block';
+
+  } catch(e){
+    document.getElementById('rms-status').textContent = 'Connection failed: ' + e.message;
+  }
+}
+
+async function rmsLoadCategories(){
+  const propId = document.getElementById('rms-property').value;
+  if(!propId) return;
+  try{
+    const token = await rmsGetToken();
+    const res = await fetch(`${RMS_BASE}/categories?modelType=basic`, { headers: rmsHeaders(token) });
+    const cats = await res.json();
+    const catSel = document.getElementById('rms-category');
+    catSel.innerHTML = '<option value="">Select category…</option>';
+    (Array.isArray(cats) ? cats : cats.result||[]).forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.name||c.id;
+      catSel.appendChild(opt);
+    });
+  }catch(e){ console.error('Categories load error:', e); }
+}
+
+async function rmsSearchOrCreateGuest(token, applicant){
+  // Search first
+  const searchRes = await fetch(`${RMS_BASE}/guests/search?modelType=basic`, {
+    method:'POST', headers: rmsHeaders(token),
+    body: JSON.stringify({ email: applicant.email, given: applicant.first_name, surname: applicant.last_name })
+  });
+  const searchData = await searchRes.json();
+  const results = Array.isArray(searchData) ? searchData : searchData.result||[];
+  if(results.length > 0) return results[0].id;
+
+  // Create new guest
+  const d = getNYData(applicant.ref_number);
+  const createRes = await fetch(`${RMS_BASE}/guests`, {
+    method:'POST', headers: rmsHeaders(token),
+    body: JSON.stringify({
+      given:       applicant.first_name||'',
+      surname:     applicant.last_name||'',
+      email:       applicant.email||'',
+      mobile:      applicant.phone||'',
+      passportNo:  applicant.passport_number || d.passport_number || '',
+      nationality: d.nationality||'',
+      birthDate:   d.dob||'',
+      university:  applicant.college||''
+    })
+  });
+  const guest = await createRes.json();
+  return guest.id || guest.guestId;
+}
+
+async function rmsCreateReservation(){
+  const a = apps.find(x=>x.ref_number===selectedRef);
+  if(!a){ toast('No applicant selected'); return; }
+
+  const propId   = document.getElementById('rms-property').value;
+  const catId    = document.getElementById('rms-category').value;
+  const notes    = document.getElementById('rms-notes').value;
+  const errEl    = document.getElementById('rms-err');
+
+  if(!propId || !catId){ errEl.textContent = 'Please select a property and category.'; return; }
+
+  const d = getNYData(a.ref_number);
+  const moveIn  = d.move_in || a.start_date || '';
+  const moveOut = d.move_out || a.end_date || '';
+  if(!moveIn || !moveOut){ errEl.textContent = 'Move-in and move-out dates are required.'; return; }
+
+  document.getElementById('rms-submit-btn').textContent = 'Creating…';
+  document.getElementById('rms-submit-btn').disabled = true;
+  errEl.textContent = '';
+
+  try {
+    const token = await rmsGetToken();
+
+    // Create primary guest
+    const guestId = await rmsSearchOrCreateGuest(token, a);
+
+    // Create secondary guest if linked
+    let secondaryGuestId = null;
+    const linkedRefs = getLinkedRefs(a.ref_number);
+    if(linkedRefs.length){
+      const la = apps.find(x=>x.ref_number===linkedRefs[0]);
+      if(la) secondaryGuestId = await rmsSearchOrCreateGuest(token, la);
+    }
+
+    // Create reservation
+    const resPayload = {
+      guestId:       guestId,
+      categoryId:    parseInt(catId),
+      propertyId:    parseInt(propId),
+      arrivalDate:   moveIn + ' 14:00:00',
+      departureDate: moveOut + ' 11:00:00',
+      adults:        parseInt(a.occupants||'1'),
+      status:        'Confirmed',
+      notes:         notes || '',
+    };
+    if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
+
+    const resRes = await fetch(`${RMS_BASE}/reservations`, {
+      method:'POST', headers: rmsHeaders(token),
+      body: JSON.stringify(resPayload)
+    });
+    const reservation = await resRes.json();
+    const resId = reservation.id || reservation.reservationId;
+
+    // Save reservation ID back to dashboard
+    if(resId) setNYData(a.ref_number, { reservation_no: String(resId) });
+
+    closeRmsModal();
+    toast(`✓ Reservation created in RMS — ID: ${resId}`);
+
+  } catch(e){
+    errEl.textContent = 'Error: ' + e.message;
+    document.getElementById('rms-submit-btn').textContent = 'Create Reservation';
+    document.getElementById('rms-submit-btn').disabled = false;
+  }
+}
+
+function closeRmsModal(){
+  document.getElementById('rms-modal').classList.remove('on');
+  document.getElementById('rms-submit-btn').textContent = 'Create Reservation';
+  document.getElementById('rms-submit-btn').disabled = false;
+}
 
 // ── EXPORT CSV ────────────────────────────────────────────
 function exportCSV(){
