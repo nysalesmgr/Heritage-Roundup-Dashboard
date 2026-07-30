@@ -2475,8 +2475,10 @@ async function rmsCall(path, method='GET', token='', body=null){
   const opts = { method: 'POST', headers };
   if(body) opts.body = JSON.stringify(body);
   const res = await fetch(RMS_PROXY, opts);
-  if(!res.ok) throw new Error(`RMS ${method} ${path} failed: ${res.status}`);
-  return res.json();
+  const text = await res.text();
+  console.log('RMS response:', res.status, text.substring(0,300));
+  if(!res.ok) throw new Error(`RMS ${method} ${path} failed: ${res.status} — ${text.substring(0,200)}`);
+  try { return JSON.parse(text); } catch(e){ return text; }
 }
 
 async function rmsGetToken(){
