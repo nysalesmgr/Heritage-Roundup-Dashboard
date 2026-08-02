@@ -2483,7 +2483,7 @@ async function rmsCall(path, method='GET', token='', body=null){
 
 async function rmsGetToken(){
   if(rmsToken) return rmsToken;
-  const data = await rmsCall('/authToken', 'POST', '', {
+  const data = await rmsCall('/authtoken', 'POST', '', {
     agentId: RMS_AGENT_ID,
     agentPassword: RMS_AGENT_PWD,
     clientId: RMS_CLIENT_ID,
