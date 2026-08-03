@@ -2521,9 +2521,11 @@ async function openRmsModal(){
 
     // Show applicant summary
     const d = getNYData(a.ref_number);
+    const moveInDisplay  = d.move_in  || a.start_date || a.formsite_movein  || '';
+    const moveOutDisplay = d.move_out || a.end_date   || a.formsite_moveout || '';
     document.getElementById('rms-applicant-summary').innerHTML = `
       <div><strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong> · ${esc(a.email||'—')}</div>
-      <div style="color:var(--t3);margin-top:4px">Move-in: ${fmtDate(d.move_in||a.start_date||'')} · Move-out: ${fmtDate(d.move_out||a.end_date||'')} · Unit: ${esc(d.unit||'—')}</div>
+      <div style="color:var(--t3);margin-top:4px">Move-in: ${moveInDisplay?fmtDate(moveInDisplay):'—'} · Move-out: ${moveOutDisplay?fmtDate(moveOutDisplay):'—'} · Unit: ${esc(d.unit||a.apartment||'—')}</div>
     `;
 
     // Check for linked applicants
