@@ -2569,8 +2569,10 @@ async function rmsSearchOrCreateGuest(token, applicant){
   // Search first
   const searchData = await rmsCall('/guests/search?modelType=basic', 'POST', token,
     { email: applicant.email, given: applicant.first_name, surname: applicant.last_name });
+  console.log('Guest search result type:', typeof searchData, 'isArray:', Array.isArray(searchData), 'value:', JSON.stringify(searchData).substring(0,100));
   const results = Array.isArray(searchData) ? searchData : searchData.result||[];
-  if(results.length > 0) return results[0].id;
+  console.log('Results length:', results.length);
+  if(results.length > 0){ console.log('Found existing guest:', results[0].id); return results[0].id; }
 
   // Create new guest
   const d = getNYData(applicant.ref_number);
