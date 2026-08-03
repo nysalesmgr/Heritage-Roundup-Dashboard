@@ -2576,19 +2576,18 @@ async function rmsSearchOrCreateGuest(token, applicant){
 
   // Create new guest
   const d = getNYData(applicant.ref_number);
+  // Build clean guest payload - only include non-empty valid fields
   const guestPayload = {
-    given:       applicant.first_name || '',
-    surname:     applicant.last_name  || '',
-    firstName:   applicant.first_name || '',
-    lastName:    applicant.last_name  || '',
-    email:       (applicant.email && applicant.email !== '—' && applicant.email !== '-') ? applicant.email : '',
-    mobile:      applicant.phone||'',
-    passportNo:  applicant.passport_number || d.passport_number || '',
-    nationality: d.nationality||'',
-    birthDate:   d.dob||'',
-    university:  applicant.college||''
+    given:   applicant.first_name || '',
+    surname: applicant.last_name  || '',
   };
-  console.log('Creating guest:', JSON.stringify(guestPayload));
+  if(applicant.email && applicant.email !== '-' && applicant.email !== '—' && applicant.email.includes('@')) guestPayload.email = applicant.email;
+  if(applicant.phone && applicant.phone !== '-') guestPayload.mobile = applicant.phone;
+  if(applicant.passport_number || d.passport_number) guestPayload.passportNo = applicant.passport_number || d.passport_number;
+  if(d.nationality) guestPayload.nationality = d.nationality;
+  if(d.dob) guestPayload.birthDate = d.dob;
+  if(applicant.college) guestPayload.university = applicant.college;
+  console.log('Creating guest payload:', JSON.stringify(guestPayload));
   const guest = await rmsCall('/guests', 'POST', token, guestPayload);
   return guest.id || guest.guestId;
 }
