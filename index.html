@@ -2629,7 +2629,7 @@ async function rmsCreateReservation(){
       arrivalDate:   moveIn + ' 14:00:00',
       departureDate: moveOut + ' 11:00:00',
       adults:        parseInt(a.occupants||'1'),
-      status:        'Confirmed',
+      status:        'Unconfirmed',
       notes:         notes || '',
     };
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
