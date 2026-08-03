@@ -2552,7 +2552,7 @@ async function rmsLoadCategories(){
   if(!propId) return;
   try{
     const token = await rmsGetToken();
-    const cats = await rmsCall('/categories?modelType=basic', 'GET', token);
+    const cats = await rmsCall(`/categories?modelType=basic&propertyId=${propId}`, 'GET', token);
     const catSel = document.getElementById('rms-category');
     catSel.innerHTML = '<option value="">Select category…</option>';
     (Array.isArray(cats) ? cats : cats.result||[]).forEach(c=>{
