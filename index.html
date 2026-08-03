@@ -2574,7 +2574,7 @@ async function rmsSearchOrCreateGuest(token, applicant){
 
   // Create new guest
   const d = getNYData(applicant.ref_number);
-  const guest = await rmsCall('/guests', 'POST', token, {
+  const guestPayload = {
     given:       applicant.first_name || applicant.given || '',
     surname:     applicant.last_name  || applicant.surname || applicant.first_name || '',
     email:       applicant.email||'',
@@ -2583,7 +2583,9 @@ async function rmsSearchOrCreateGuest(token, applicant){
     nationality: d.nationality||'',
     birthDate:   d.dob||'',
     university:  applicant.college||''
-  });
+  };
+  console.log('Creating guest:', JSON.stringify(guestPayload));
+  const guest = await rmsCall('/guests', 'POST', token, guestPayload);
   return guest.id || guest.guestId;
 }
 
