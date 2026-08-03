@@ -2072,6 +2072,13 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
+  // Auto-scan passport or license in background
+  setTimeout(()=>{
+    const docUrl = a.passport_1_url || a.license_url || '';
+    const docLabel = a.passport_1_url ? 'Passport' : 'Driver License';
+    if(docUrl) autoScanDocument(docUrl, docLabel);
+  }, 800);
+
   // Async load — also fetch history from older entries by same name
   const fullName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
   const olderRefs = apps
