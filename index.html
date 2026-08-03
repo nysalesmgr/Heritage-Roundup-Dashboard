@@ -2074,8 +2074,9 @@ function openPanel(ref){
 
   // Auto-scan passport or license in background
   setTimeout(()=>{
-    const docUrl = a.passport_1_url || a.license_url || '';
-    const docLabel = a.passport_1_url ? 'Passport' : 'Driver License';
+    const docUrl = a.passport_1_url || a.license_url || a.enrollment_url || '';
+    const docLabel = a.passport_1_url ? 'Passport' : a.license_url ? 'Driver License' : 'Document';
+    console.log('Auto-scan trigger:', docUrl ? docUrl.substring(0,60) : 'no doc found');
     if(docUrl) autoScanDocument(docUrl, docLabel);
   }, 800);
 
