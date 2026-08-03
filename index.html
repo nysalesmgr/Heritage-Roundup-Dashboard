@@ -2577,8 +2577,10 @@ async function rmsSearchOrCreateGuest(token, applicant){
   // Create new guest
   const d = getNYData(applicant.ref_number);
   const guestPayload = {
-    given:       applicant.first_name || applicant.given || '',
-    surname:     applicant.last_name  || applicant.surname || applicant.first_name || '',
+    given:       applicant.first_name || '',
+    surname:     applicant.last_name  || '',
+    firstName:   applicant.first_name || '',
+    lastName:    applicant.last_name  || '',
     email:       applicant.email||'',
     mobile:      applicant.phone||'',
     passportNo:  applicant.passport_number || d.passport_number || '',
