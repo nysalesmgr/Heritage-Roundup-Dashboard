@@ -2581,7 +2581,7 @@ async function rmsSearchOrCreateGuest(token, applicant){
     surname:     applicant.last_name  || '',
     firstName:   applicant.first_name || '',
     lastName:    applicant.last_name  || '',
-    email:       applicant.email||'',
+    email:       (applicant.email && applicant.email !== '—' && applicant.email !== '-') ? applicant.email : '',
     mobile:      applicant.phone||'',
     passportNo:  applicant.passport_number || d.passport_number || '',
     nationality: d.nationality||'',
