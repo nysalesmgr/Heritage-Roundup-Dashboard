@@ -671,8 +671,14 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
         </div>
         <div>
           <div class="il-l">Category (Room Type) *</div>
-          <select id="rms-category" class="notes-area" style="min-height:0;padding:7px 10px;width:100%">
+          <select id="rms-category" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" onchange="rmsLoadAreas()">
             <option value="">Select category…</option>
+          </select>
+        </div>
+        <div>
+          <div class="il-l">Area (Room) *</div>
+          <select id="rms-area" class="notes-area" style="min-height:0;padding:7px 10px;width:100%">
+            <option value="">Select area…</option>
           </select>
         </div>
       </div>
@@ -2545,7 +2551,22 @@ async function openRmsModal(){
   }
 }
 
-async function rmsLoadCategories(){
+async function rmsLoadAreas(){
+  const propId = document.getElementById('rms-property').value;
+  const catId  = document.getElementById('rms-category').value;
+  if(!propId || !catId) return;
+  try{
+    const token = await rmsGetToken();
+    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&categoryId=${catId}`, 'GET', token);
+    const areaSel = document.getElementById('rms-area');
+    areaSel.innerHTML = '<option value="">Select area…</option>';
+    (Array.isArray(res) ? res : res.result||[]).forEach(a=>{
+      const opt = document.createElement('option');
+      opt.value = a.id; opt.textContent = a.name||a.id;
+      areaSel.appendChild(opt);
+    });
+  }catch(e){ console.error('Areas load error:', e); }
+}
   const propId = document.getElementById('rms-property').value;
   if(!propId) return;
   try{
@@ -2597,10 +2618,11 @@ async function rmsCreateReservation(){
 
   const propId   = document.getElementById('rms-property').value;
   const catId    = document.getElementById('rms-category').value;
+  const areaId   = document.getElementById('rms-area').value;
   const notes    = document.getElementById('rms-notes').value;
   const errEl    = document.getElementById('rms-err');
 
-  if(!propId || !catId){ errEl.textContent = 'Please select a property and category.'; return; }
+  if(!propId || !catId || !areaId){ errEl.textContent = 'Please select a property, category and area.'; return; }
 
   const d = getNYData(a.ref_number);
   const moveIn  = d.move_in || a.start_date || '';
@@ -2629,6 +2651,7 @@ async function rmsCreateReservation(){
     const resPayload = {
       guestId:       guestId,
       categoryId:    parseInt(catId),
+      areaId:        parseInt(areaId),
       propertyId:    parseInt(propId),
       arrivalDate:   moveIn + ' 14:00:00',
       departureDate: moveOut + ' 11:00:00',
