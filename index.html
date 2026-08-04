@@ -2567,8 +2567,11 @@ async function rmsLoadAreas(){
     });
   }catch(e){ console.error('Areas load error:', e); }
 }
+async function rmsLoadCategories(){
   const propId = document.getElementById('rms-property').value;
   if(!propId) return;
+  document.getElementById('rms-category').innerHTML = '<option value="">Loading…</option>';
+  document.getElementById('rms-area').innerHTML = '<option value="">Select area…</option>';
   try{
     const token = await rmsGetToken();
     const cats = await rmsCall(`/categories?modelType=basic&propertyId=${propId}`, 'GET', token);
