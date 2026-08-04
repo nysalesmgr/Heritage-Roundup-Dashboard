@@ -2565,22 +2565,19 @@ async function rmsSearchOrCreateGuest(token, applicant){
   // Search first
   const searchData = await rmsCall('/guests/search?modelType=basic', 'POST', token,
     { email: applicant.email, given: applicant.first_name, surname: applicant.last_name });
-  console.log('Guest search result type:', typeof searchData, 'isArray:', Array.isArray(searchData), 'value:', JSON.stringify(searchData).substring(0,100));
   const results = Array.isArray(searchData) ? searchData : searchData.result||[];
-  console.log('Results length:', results.length);
-  if(results.length > 0){ console.log('Found existing guest:', results[0].id); return results[0].id; }
+  if(results.length > 0) return results[0].id;
 
   // Create new guest
   const d = getNYData(applicant.ref_number);
   // Build clean guest payload - only include non-empty valid fields
   const guestPayload = {
-    given:   (applicant.first_name || '').trim(),
-    surname: (applicant.last_name  || '').trim(),
+    guestGiven:   (applicant.first_name || '').trim(),
+    guestSurname: (applicant.last_name  || '').trim(),
   };
-  if(!guestPayload.given || !guestPayload.surname){
-    throw new Error(`Missing name: given="${guestPayload.given}" surname="${guestPayload.surname}"`);
+  if(!guestPayload.guestGiven || !guestPayload.guestSurname){
+    throw new Error(`Missing name: given="${guestPayload.guestGiven}" surname="${guestPayload.guestSurname}"`);
   }
-  // Add optional fields only if valid
   if(applicant.email && applicant.email.includes('@')) guestPayload.email = applicant.email;
   if(applicant.phone && applicant.phone.length > 3) guestPayload.mobile = applicant.phone;
   if(applicant.college) guestPayload.university = applicant.college;
