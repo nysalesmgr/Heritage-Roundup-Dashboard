@@ -2580,6 +2580,7 @@ async function rmsSearchOrCreateGuest(token, applicant){
   }
   if(applicant.email && applicant.email.includes('@')) guestPayload.email = applicant.email;
   if(applicant.phone && applicant.phone.length > 3) guestPayload.mobile = applicant.phone;
+  else guestPayload.mobile = '0000000000'; // RMS requires mobile
   if(applicant.college) guestPayload.university = applicant.college;
   const pn = applicant.passport_number || d.passport_number;
   if(pn && pn.length > 2) guestPayload.passportNo = pn;
