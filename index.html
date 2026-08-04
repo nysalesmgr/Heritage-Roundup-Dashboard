@@ -2585,7 +2585,7 @@ async function rmsLoadCategories(){
   }catch(e){ console.error('Categories load error:', e); }
 }
 
-async function rmsSearchOrCreateGuest(token, applicant){
+async function rmsSearchOrCreateGuest(token, applicant, idType='', guestStatus=''){
   // Search first
   const searchData = await rmsCall('/guests/search?modelType=basic', 'POST', token,
     { email: applicant.email, given: applicant.first_name, surname: applicant.last_name });
@@ -2603,13 +2603,16 @@ async function rmsSearchOrCreateGuest(token, applicant){
     throw new Error(`Missing name: given="${guestPayload.guestGiven}" surname="${guestPayload.guestSurname}"`);
   }
   if(applicant.email && applicant.email.includes('@')) guestPayload.email = applicant.email;
-  if(applicant.phone && applicant.phone.length > 3) guestPayload.mobile = applicant.phone;
-  else guestPayload.mobile = '0000000000'; // RMS requires mobile
-  if(applicant.college) guestPayload.university = applicant.college;
+  guestPayload.mobile = (applicant.phone && applicant.phone.length > 3) ? applicant.phone : '0000000000';
+  if(applicant.college)      guestPayload.university   = applicant.college;
+  if(d.nationality)          guestPayload.nationality  = d.nationality;
+  if(d.dob)                  guestPayload.birthDate    = d.dob;
+  if(idType)                 guestPayload.idType       = idType;
+  if(guestStatus)            guestPayload.guestStatus  = guestStatus;
   const pn = applicant.passport_number || d.passport_number;
-  if(pn && pn.length > 2) guestPayload.passportNo = pn;
-  if(d.nationality) guestPayload.nationality = d.nationality;
-  if(d.dob) guestPayload.birthDate = d.dob;
+  if(pn && pn.length > 2)    guestPayload.passportNo   = pn;
+  const exp = applicant.passport_expiry || d.passport_expiry;
+  if(exp)                    guestPayload.idExpiryDate = exp;
   console.log('Creating guest payload:', JSON.stringify(guestPayload));
   const guest = await rmsCall('/guests', 'POST', token, guestPayload);
   return guest.id || guest.guestId;
@@ -2639,29 +2642,58 @@ async function rmsCreateReservation(){
   try {
     const token = await rmsGetToken();
 
+    // Determine ID type from uploaded documents
+    const idType = a.passport_1_url ? 'Passport' : a.license_url ? 'Driver Licence' : '';
+
+    // Determine guest status from uploaded documents
+    const guestStatus = a.i20_1_url ? 'Student' : a.internship_url ? 'Intern' : '';
+
     // Create primary guest
-    const guestId = await rmsSearchOrCreateGuest(token, a);
+    const guestId = await rmsSearchOrCreateGuest(token, a, idType, guestStatus);
 
     // Create secondary guest if linked
     let secondaryGuestId = null;
     const linkedRefs = getLinkedRefs(a.ref_number);
     if(linkedRefs.length){
       const la = apps.find(x=>x.ref_number===linkedRefs[0]);
-      if(la) secondaryGuestId = await rmsSearchOrCreateGuest(token, la);
+      if(la){
+        const laIdType = la.passport_1_url ? 'Passport' : la.license_url ? 'Driver Licence' : '';
+        const laGuestStatus = la.i20_1_url ? 'Student' : la.internship_url ? 'Intern' : '';
+        secondaryGuestId = await rmsSearchOrCreateGuest(token, la, laIdType, laGuestStatus);
+      }
     }
 
     // Create reservation
+    // Parse booking source and broker name from lead_source
+    const leadSource = d.lead_source || a.formsite_source || '';
+    const sourceParts = leadSource.split(' - ');
+    const bookingSource = sourceParts[0].trim();
+    const brokerName = sourceParts.length > 1 ? sourceParts[1].trim() : '';
+
+    // Get commission values
+    const commPct = d.incentives || '';
+    const commAmt = calcCommission(a).replace('$','').replace(',','');
+
+    // Get monthly rent for deposit
+    const monthlyRent = parseFloat((d.monthly_rent||'').replace(/[$,]/g,'')) || 0;
+
     const resPayload = {
-      guestId:       guestId,
-      categoryId:    parseInt(catId),
-      areaId:        parseInt(areaId),
-      propertyId:    parseInt(propId),
-      arrivalDate:   moveIn + ' 14:00:00',
-      departureDate: moveOut + ' 11:00:00',
-      adults:        parseInt(a.occupants||'1'),
-      status:        'Unconfirmed',
-      notes:         notes || '',
+      guestId:          guestId,
+      categoryId:       parseInt(catId),
+      areaId:           parseInt(areaId),
+      propertyId:       parseInt(propId),
+      arrivalDate:      moveIn + ' 14:00:00',
+      departureDate:    moveOut + ' 11:00:00',
+      adults:           parseInt(a.occupants||'1'),
+      status:           'Unconfirmed',
+      notes:            notes || '',
+      season:           d.season || '',
     };
+    if(bookingSource) resPayload.bookingSourceId = bookingSource;
+    if(brokerName)    resPayload.brokerName      = brokerName;
+    if(commPct)       resPayload.commissionPct   = parseFloat(commPct);
+    if(commAmt && commAmt !== '—') resPayload.commissionAmount = parseFloat(commAmt);
+    if(monthlyRent)   resPayload.deposit         = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
 
     const reservation = await rmsCall('/reservations', 'POST', token, resPayload);
