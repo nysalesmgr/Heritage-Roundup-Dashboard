@@ -999,13 +999,22 @@ async function loadBostonApps(){
     const res = await fetch(SUPABASE_URL + '/rest/v1/applications?select=*&order=created_at.desc', { headers: SB_HEADERS });
     if(res.ok){ const rows=await res.json(); rows.forEach(r=>{
       apps.push({...r,_source:r.source_override||'Booking Engine',_property:'boston',_table:'applications'});
-      // Auto-fill lead_source for Booking Engine entries
+      // Auto-fill lead_source and season for Booking Engine entries
       const ref = String(r.ref_number||r.id);
       const cached = editableCache[ref]||{};
-      if(!cached.lead_source){
-        const src = r.source_override||'Booking Engine';
-        editableCache[ref] = {...cached, lead_source: src};
-        setTimeout(()=>setNYData(ref,{lead_source: src}),100);
+      const updates = {};
+      if(!cached.lead_source){ updates.lead_source = r.source_override||'Booking Engine'; }
+      if(!cached.season){
+        const moveIn  = r.start_date || cached.move_in || '';
+        const moveOut = r.end_date   || cached.move_out || '';
+        if(moveIn && moveOut){
+          const months = calcMonths(moveIn, moveOut);
+          updates.season = months < 10 ? '9 months' : '12 months';
+        }
+      }
+      if(Object.keys(updates).length){
+        editableCache[ref] = {...cached, ...updates};
+        setTimeout(()=>setNYData(ref, updates), 100);
       }
     }); }
   } catch(e){ console.error('Supabase error:', e); }
