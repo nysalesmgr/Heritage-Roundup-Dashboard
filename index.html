@@ -745,7 +745,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const STAFF_LIST = ['Kyla','Dianna','Charlotte','Will','Jonia','Karen'];
 
-// ── PIN ──────────────────────────────────────────────────
+// ── SECURITY ─────────────────────────────────────────────
+let pinAttempts = {};
+let inactivityTimer = null;
+const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+
+function resetInactivityTimer(){
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(()=>{
+    if(document.getElementById('app').classList.contains('ready')){
+      toast('Session expired — please log in again');
+      setTimeout(()=>logout(), 1500);
+    }
+  }, INACTIVITY_TIMEOUT);
+}
+
+// Reset timer on any user interaction
+['click','keydown','mousemove','touchstart'].forEach(evt=>{
+  document.addEventListener(evt, resetInactivityTimer, { passive: true });
+});
+
+// Console warning
+console.log('%cStop!', 'color:red;font-size:40px;font-weight:bold');
+console.log('%cThis is a private dashboard. Unauthorized access is prohibited.', 'color:red;font-size:14px');
 let staffPins = {};
 async function loadStaffPins(){
   try{
@@ -777,16 +799,24 @@ function pinKey(d){
   pinBuffer += d; updateDots();
   if(pinBuffer.length === 4){
     if(pinBuffer === getPin(currentStaff)){
+      pinAttempts[currentStaff] = 0;
       sessionStorage.setItem('hc_staff', currentStaff);
       document.getElementById('staff-screen').style.display = 'none';
       document.getElementById('app').classList.add('ready');
       document.getElementById('staff-indicator').textContent = '👤 ' + currentStaff;
       document.getElementById('add-app-btn').style.display = 'block';
+      resetInactivityTimer();
       loadApps();
       startAutoRefresh();
     } else {
-      document.getElementById('pin-err').textContent = 'Incorrect PIN.';
-      setTimeout(()=>{ pinBuffer=''; updateDots(); document.getElementById('pin-err').textContent=''; }, 800);
+      pinAttempts[currentStaff] = (pinAttempts[currentStaff]||0) + 1;
+      if(pinAttempts[currentStaff] >= 5){
+        document.getElementById('pin-err').textContent = 'Too many attempts. Try again in 5 minutes.';
+        setTimeout(()=>{ pinAttempts[currentStaff]=0; pinBuffer=''; updateDots(); document.getElementById('pin-err').textContent=''; }, 300000);
+      } else {
+        document.getElementById('pin-err').textContent = `Incorrect PIN. ${5-pinAttempts[currentStaff]} attempts remaining.`;
+        setTimeout(()=>{ pinBuffer=''; updateDots(); document.getElementById('pin-err').textContent=''; }, 800);
+      }
     }
   }
 }
