@@ -802,8 +802,8 @@ let autoRefreshTimer = null;
 function startAutoRefresh(){
   if(autoRefreshTimer) clearInterval(autoRefreshTimer);
   autoRefreshTimer = setInterval(()=>{
-    if(!selectedRef){ loadApps(false); } // skip if a panel is open, to avoid disrupting edits
-  }, 60000);
+    if(!selectedRef){ loadApps(false); }
+  }, 180000);
 }
 function stopAutoRefresh(){ if(autoRefreshTimer){ clearInterval(autoRefreshTimer); autoRefreshTimer=null; } }
 
@@ -977,10 +977,9 @@ async function loadApps(showMsg){
   if(showMsg) toast('Refreshing…');
   apps = [];
   try{
-    await loadEditableData();
-    await loadRenewals();
-    await loadBlacklist();
-    await loadLinkedReservations();
+    // Load support data in parallel
+    await Promise.all([loadEditableData(), loadRenewals(), loadBlacklist(), loadLinkedReservations()]);
+    // Load apps for current property
     if(currentProperty === 'boston'){
       await loadBostonApps();
     } else {
