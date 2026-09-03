@@ -1802,7 +1802,17 @@ function editCell(td, ref, field, type){
   const save = () => {
     const val = input.value;
     setNYData(ref,{[field]:val});
-    td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?fmtDate(val):val):'—'}</span>`;
+    // For season field, apply colour immediately
+    if(field==='season'){
+      const v = (val||'').toLowerCase();
+      let seasonStyle = '';
+      if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${val&&val!=='—'?val:'—'}</span>`;
+    } else {
+      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?fmtDate(val):val):'—'}</span>`;
+    }
     // Update commission amount if relevant fields changed
     if(['incentives','monthly_rent','move_in','move_out','unit'].includes(field)){
       setTimeout(()=>renderTable(), 50);
