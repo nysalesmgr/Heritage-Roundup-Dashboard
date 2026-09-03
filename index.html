@@ -1952,7 +1952,13 @@ function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
   const val = cached[field]||(fallback||'');
   const display = val && val!=='—' ? (type==='date' ? fmtDate(val) : val) : '—';
-  return `<td class="editable-cell" onclick="event.stopPropagation();editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}">${display}</span></td>`;
+  let seasonStyle = '';
+  if(field==='season' && val){
+    const v = val.toLowerCase();
+    if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+    else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+  }
+  return `<td class="editable-cell" onclick="event.stopPropagation();editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${display}</span></td>`;
 }
 
 // ── APPLICATIONS TABLE ────────────────────────────────────
