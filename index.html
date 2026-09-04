@@ -2792,7 +2792,7 @@ async function rmsCreateReservation(){
           });
           const { base64 } = await scanRes.json();
           if(!base64) continue;
-          await rmsCall(`/reservations/${resId}/correspondence`, 'POST', token, {
+          await rmsCall(`/reservations/${resId}/document`, 'POST', token, {
             documentName: doc.name,
             documentContent: base64,
             note: doc.note
