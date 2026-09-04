@@ -991,6 +991,7 @@ async function loadBostonApps(){
       if(!cached.lead_source) updates.lead_source = r.source_override||'Booking Engine';
       if(!cached.move_in && entry.start_date)   updates.move_in      = entry.start_date;
       if(!cached.move_out && entry.end_date)     updates.move_out     = entry.end_date;
+      if(!cached.unit && (r.apartment || raw.unit)) updates.unit      = r.apartment || raw.unit;
       if(!cached.monthly_rent && entry.monthly_rate){
         const num = parseFloat(entry.monthly_rate);
         updates.monthly_rent = '$' + (isNaN(num) ? entry.monthly_rate : Math.round(num).toLocaleString('en-US'));
