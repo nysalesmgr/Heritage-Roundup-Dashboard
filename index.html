@@ -1091,16 +1091,30 @@ function normalizeSupabaseFormsite(row){
     formsite_source:  raw['26'] || '',
     passport_number: raw['22'] || '',
     passport_expiry: raw['23'] || '',
-    license_url:    raw['57'] || '',  // Driver License/Passport (Domestic)
-    enrollment_url: raw['59'] || '',  // Letter of Enrolment/Acceptance from School
-    internship_url: raw['67'] || '',  // Internship Letter
-    passport_1_url: raw['57'] || '',  // Same as license for domestic (Driver License/Passport)
-    i20_1_url:      raw['58'] || '',  // I-20 (International)
-    visa_1_url:     raw['59'] || '',  // Visa (International)
     _source:   source.includes('Domestic') ? 'Domestic' : 'International',
     _property: property,
     _table:    'formsite_submissions',
   };
+
+  // Document URLs — differ by form source
+  const isDomestic = source.includes('Domestic');
+  const isBoston   = source.includes('Boston');
+  if(isDomestic){
+    result.license_url    = raw['57'] || '';
+    result.enrollment_url = raw['59'] || '';
+    result.internship_url = raw['67'] || '';
+    result.passport_1_url = raw['57'] || '';
+  } else if(isBoston){
+    result.passport_1_url = raw['84'] || '';
+    result.visa_1_url     = raw['85'] || '';
+    result.i20_1_url      = raw['86'] || '';
+  } else {
+    // NY International
+    result.passport_1_url = raw['57'] || '';
+    result.visa_1_url     = raw['58'] || '';
+    result.i20_1_url      = raw['59'] || '';
+    result.internship_url = raw['65'] || '';
+  }
   // Auto-save move-in, move-out and source to editable_data if not already set
   const cached = editableCache[ref] || {};
   const movein  = raw['81'] ? raw['81'] : (raw['82'] || '');
