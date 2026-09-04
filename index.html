@@ -2564,13 +2564,16 @@ async function rmsGetToken(){
   return rmsToken;
 }
 
+let rmsSelectedRef = null;
+
 async function openRmsModal(){
+  rmsSelectedRef = selectedRef; // store before panel might close
   document.getElementById('rms-modal').classList.add('on');
   document.getElementById('rms-form').style.display = 'none';
   document.getElementById('rms-status').textContent = 'Connecting to RMS…';
   document.getElementById('rms-err').textContent = '';
 
-  const a = apps.find(x=>x.ref_number===selectedRef);
+  const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
   if(!a){ document.getElementById('rms-status').textContent = 'No applicant selected.'; return; }
 
   try {
@@ -2687,7 +2690,7 @@ async function rmsSearchOrCreateGuest(token, applicant, idType='', guestStatus='
 }
 
 async function rmsCreateReservation(){
-  const a = apps.find(x=>x.ref_number===selectedRef);
+  const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
   if(!a){ toast('No applicant selected'); return; }
 
   const propId   = document.getElementById('rms-property').value;
@@ -2766,7 +2769,7 @@ async function rmsCreateReservation(){
     const resId = reservation.id || reservation.reservationId;
 
     // Save reservation ID back to dashboard
-    if(resId) setNYData(a.ref_number, { reservation_no: String(resId) });
+    if(resId) setNYData(rmsSelectedRef||a.ref_number, { reservation_no: String(resId) });
 
     // Upload documents to RMS correspondence
     const docs = [
