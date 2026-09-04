@@ -2060,9 +2060,12 @@ function openPanel(ref){
   }
 
   
-  document.getElementById('sec-ny-extra').style.display = isNY ? 'block' : 'none';
-  if(isNY){
-    document.getElementById('t-address').textContent  = a.address||'—';
+  document.getElementById('sec-ny-extra').style.display = (isNY || isBookingEngine) ? 'block' : 'none';
+  if(isNY || isBookingEngine){
+    const raw = a.raw_data || {};
+    let occ = [];
+    try{ occ = JSON.parse(raw.occupants_details||'[]'); }catch(e){}
+    document.getElementById('t-address').textContent  = a.address || occ[0]?.address || '—';
     document.getElementById('t-course').textContent   = a.course||'—';
     document.getElementById('t-referral').textContent = a.referral||'—';
     document.getElementById('t-passport-num').textContent = a.passport_number||'—';
