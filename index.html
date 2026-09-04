@@ -2533,13 +2533,16 @@ function editPanelField(elId, field, el){
 // ── DOCUMENT SCANNING (Supabase Storage + Google Vision) ─
 async function autoScanFromStorage(storagePath, ref, bucket='documents'){
   try {
+    console.log('autoScanFromStorage called:', storagePath, bucket);
     const res = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
       body: JSON.stringify({ storage_path: storagePath, bucket })
     });
-    if(!res.ok) return;
+    console.log('doc-scan response status:', res.status);
+    if(!res.ok){ console.error('doc-scan failed:', res.status); return; }
     const { text, error } = await res.json();
+    console.log('text length:', text?.length, 'error:', error);
     if(error || !text) return;
 
     const extracted = parsePassportMRZ(text);
