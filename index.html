@@ -2880,7 +2880,7 @@ async function rmsCreateReservation(){
     if(resId) setNYData(rmsSelectedRef||a.ref_number, { reservation_no: String(resId) });
 
     // Upload documents to RMS correspondence
-    const docs = [
+    const allDocs = [
       { url: a.passport_1_url, name: 'Passport.jpg', note: 'Passport' },
       { url: a.license_url,    name: 'DriverLicense.jpg', note: 'Driver License' },
       { url: a.i20_1_url,      name: 'I20.jpg', note: 'I-20' },
@@ -2888,6 +2888,9 @@ async function rmsCreateReservation(){
       { url: a.enrollment_url, name: 'EnrollmentLetter.jpg', note: 'Enrollment Letter' },
       { url: a.internship_url, name: 'InternshipOffer.jpg', note: 'Internship Offer Letter' },
     ].filter(d => d.url);
+    // Remove duplicates (same URL uploaded under different field names)
+    const seenUrls = new Set();
+    const docs = allDocs.filter(d => { if(seenUrls.has(d.url)) return false; seenUrls.add(d.url); return true; });
 
     if(docs.length && resId){
       toast('Uploading documents to RMS…');
