@@ -804,12 +804,28 @@ function pinKey(d){
     if(pinBuffer === getPin(currentStaff)){
       pinAttempts[currentStaff] = 0;
       pinBuffer=''; updateDots();
-      // Send OTP
-      document.getElementById('staff-screen').style.display = 'none';
-      document.getElementById('otp-screen').style.display = 'flex';
-      document.getElementById('otp-input').value = '';
-      document.getElementById('otp-err').textContent = '';
-      sendOtp();
+
+      // Check if OTP was verified within last 24 hours on this device
+      const lastVerified = localStorage.getItem('hc_otp_' + currentStaff);
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      if(lastVerified && (Date.now() - parseInt(lastVerified)) < twentyFourHours){
+        // Skip OTP — log in directly
+        document.getElementById('staff-screen').style.display = 'none';
+        sessionStorage.setItem('hc_staff', currentStaff);
+        document.getElementById('app').classList.add('ready');
+        document.getElementById('staff-indicator').textContent = '👤 ' + currentStaff;
+        document.getElementById('add-app-btn').style.display = 'block';
+        resetInactivityTimer();
+        loadApps();
+        startAutoRefresh();
+      } else {
+        // Require OTP
+        document.getElementById('staff-screen').style.display = 'none';
+        document.getElementById('otp-screen').style.display = 'flex';
+        document.getElementById('otp-input').value = '';
+        document.getElementById('otp-err').textContent = '';
+        sendOtp();
+      }
     } else {
       pinAttempts[currentStaff] = (pinAttempts[currentStaff]||0) + 1;
       if(pinAttempts[currentStaff] >= 5){
@@ -877,7 +893,8 @@ async function verifyOtp(){
     if(now > expires){ document.getElementById('otp-err').textContent = 'Code expired. Request a new one.'; return; }
     if(row.otp !== otp){ document.getElementById('otp-err').textContent = 'Incorrect code. Please try again.'; return; }
 
-    // OTP verified — clear it and log in
+    // OTP verified — save timestamp and log in
+    localStorage.setItem('hc_otp_' + currentStaff, Date.now().toString());
     fetch(`${SUPABASE_URL}/rest/v1/staff_pins?staff_name=eq.${encodeURIComponent(currentStaff)}`, {
       method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ otp: null, otp_expires_at: null })
