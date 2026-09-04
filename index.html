@@ -2137,9 +2137,13 @@ function openPanel(ref){
   // Auto-scan passport from Supabase Storage if available
   setTimeout(()=>{
     const raw = a.raw_data || {};
-    const storagePath = raw.stored_passport || raw.stored_i20 || raw.stored_license || '';
+    const storagePath = raw.stored_passport || raw.stored_license || raw.stored_i20 || '';
     if(storagePath && !storagePath.startsWith('http')){
-      autoScanFromStorage(storagePath, a.ref_number);
+      const bucket = a._source === 'Boston Booking Engine' ? 'boston-applications'
+                   : a._property === 'boston' ? 'boston-formsite'
+                   : a._source === 'NY Summer Booking Engine' ? 'ny-applications'
+                   : 'ny-formsite';
+      autoScanFromStorage(storagePath, a.ref_number, bucket);
     }
   }, 800);
 
@@ -2524,12 +2528,12 @@ function editPanelField(elId, field, el){
   input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
 // ── DOCUMENT SCANNING (Supabase Storage + Google Vision) ─
-async function autoScanFromStorage(storagePath, ref){
+async function autoScanFromStorage(storagePath, ref, bucket='documents'){
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
-      body: JSON.stringify({ storage_path: storagePath })
+      body: JSON.stringify({ storage_path: storagePath, bucket })
     });
     if(!res.ok) return;
     const { text, error } = await res.json();
