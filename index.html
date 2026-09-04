@@ -2141,11 +2141,13 @@ function openPanel(ref){
   setTimeout(()=>{
     const raw = a.raw_data || {};
     const storagePath = raw.stored_passport || raw.stored_license || raw.stored_i20 || '';
+    console.log('Auto-scan check:', storagePath, a._source, a._property);
     if(storagePath && !storagePath.startsWith('http')){
       const bucket = a._source === 'Boston Booking Engine' ? 'boston-applications'
                    : a._property === 'boston' ? 'boston-formsite'
                    : a._source === 'NY Summer Booking Engine' ? 'ny-applications'
                    : 'ny-formsite';
+      console.log('Scanning with bucket:', bucket);
       autoScanFromStorage(storagePath, a.ref_number, bucket);
     }
   }, 800);
