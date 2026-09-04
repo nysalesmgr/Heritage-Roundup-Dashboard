@@ -2622,10 +2622,13 @@ async function rmsLoadAreas(){
   if(!propId || !catId) return;
   try{
     const token = await rmsGetToken();
-    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}`, 'GET', token);
+    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET', token);
+    const allAreas = Array.isArray(res) ? res : res.result||[];
+    const catIdNum = parseInt(catId);
+    const areas = catId ? allAreas.filter(a=>a.categoryId===catIdNum) : allAreas;
     const areaSel = document.getElementById('rms-area');
     areaSel.innerHTML = '<option value="">Select area…</option>';
-    (Array.isArray(res) ? res : res.result||[]).forEach(a=>{
+    areas.forEach(a=>{
       const opt = document.createElement('option');
       opt.value = a.id; opt.textContent = a.name||a.id;
       areaSel.appendChild(opt);
