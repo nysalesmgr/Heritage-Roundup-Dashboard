@@ -2768,8 +2768,40 @@ async function rmsCreateReservation(){
     // Save reservation ID back to dashboard
     if(resId) setNYData(a.ref_number, { reservation_no: String(resId) });
 
+    // Upload documents to RMS correspondence
+    const docs = [
+      { url: a.passport_1_url, name: 'Passport.jpg', note: 'Passport' },
+      { url: a.license_url,    name: 'DriverLicense.jpg', note: 'Driver License' },
+      { url: a.i20_1_url,      name: 'I20.jpg', note: 'I-20' },
+      { url: a.visa_1_url,     name: 'Visa.jpg', note: 'Visa' },
+      { url: a.enrollment_url, name: 'EnrollmentLetter.jpg', note: 'Enrollment Letter' },
+      { url: a.internship_url, name: 'InternshipOffer.jpg', note: 'Internship Offer Letter' },
+    ].filter(d => d.url);
+
+    if(docs.length && resId){
+      toast('Uploading documents to RMS…');
+      for(const doc of docs){
+        try {
+          const scanRes = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
+            body: JSON.stringify({ url: doc.url, mode: 'upload' })
+          });
+          const { base64 } = await scanRes.json();
+          if(!base64) continue;
+          await rmsCall(`/reservations/${resId}/correspondence`, 'POST', token, {
+            documentName: doc.name,
+            documentContent: base64,
+            note: doc.note
+          });
+        } catch(e){ console.warn('Doc upload failed:', doc.note, e.message); }
+      }
+      toast(`✓ Reservation created + ${docs.length} document(s) uploaded to RMS`);
+    } else {
+      toast(`✓ Reservation created in RMS — ID: ${resId}`);
+    }
+
     closeRmsModal();
-    toast(`✓ Reservation created in RMS — ID: ${resId}`);
 
   } catch(e){
     errEl.textContent = 'Error: ' + e.message;
