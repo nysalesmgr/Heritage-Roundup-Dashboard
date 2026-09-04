@@ -966,15 +966,38 @@ async function loadBostonApps(){
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/applications?select=*&order=created_at.desc', { headers: SB_HEADERS });
     if(res.ok){ const rows=await res.json(); rows.forEach(r=>{
-      apps.push({...r,_source:r.source_override||'Booking Engine',_property:'boston',_table:'applications'});
-      // Auto-fill lead_source and season for Booking Engine entries
+      const raw = r.raw_data || {};
+      // Parse occupants_details for documents
+      let occ = [];
+      try{ occ = JSON.parse(raw.occupants_details||'[]'); }catch(e){}
+      const entry = {
+        ...r,
+        start_date:    r.start_date || raw.move_in || '',
+        end_date:      r.end_date   || raw.move_out || '',
+        monthly_rate:  r.monthly_rate || raw.monthly_rate || '',
+        college:       occ[0]?.college || '',
+        license_url:   r.license_url    || occ[0]?.driver_license_url    || '',
+        enrollment_url:r.enrollment_url || occ[0]?.enrollment_letter_url || '',
+        internship_url:r.internship_url || occ[0]?.internship_offer_url  || '',
+        _source:       r.source_override||'Booking Engine',
+        _property:     'boston',
+        _table:        'applications'
+      };
+      apps.push(entry);
+      // Auto-fill editable fields
       const ref = String(r.ref_number||r.id);
       const cached = editableCache[ref]||{};
       const updates = {};
-      if(!cached.lead_source){ updates.lead_source = r.source_override||'Booking Engine'; }
+      if(!cached.lead_source) updates.lead_source = r.source_override||'Booking Engine';
+      if(!cached.move_in && entry.start_date)   updates.move_in      = entry.start_date;
+      if(!cached.move_out && entry.end_date)     updates.move_out     = entry.end_date;
+      if(!cached.monthly_rent && entry.monthly_rate){
+        const num = parseFloat(entry.monthly_rate);
+        updates.monthly_rent = '$' + (isNaN(num) ? entry.monthly_rate : Math.round(num).toLocaleString('en-US'));
+      }
       if(!cached.season){
-        const moveIn  = r.start_date || cached.move_in || '';
-        const moveOut = r.end_date   || cached.move_out || '';
+        const moveIn  = entry.start_date || '';
+        const moveOut = entry.end_date   || '';
         if(moveIn && moveOut){
           const months = calcMonths(moveIn, moveOut);
           updates.season = months < 10 ? '9 months' : '12 months';
