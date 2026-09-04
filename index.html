@@ -607,6 +607,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
           <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelFieldEditable('t-dob','dob',this,'date')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelFieldEditable('t-nationality','nationality',this,'text')" style="cursor:pointer">—</div></div>
+          <div style="grid-column:1/-1;margin-top:4px"><button onclick="manualScanDocument()" style="font-size:11px;background:var(--navy);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">🔍 Scan Document</button></div>
         </div>
       </div>
     </div>
@@ -2671,6 +2672,20 @@ function acceptScanValue(ref, field, value, btn){
   btn.disabled = true;
   btn.style.background = '#059669';
   toast(`${field} updated from document ✓`);
+}
+
+async function manualScanDocument(){
+  const a = apps.find(x=>x.ref_number===selectedRef);
+  if(!a) return;
+  const raw = a.raw_data || {};
+  const storagePath = raw.stored_passport || raw.stored_license || raw.stored_i20 || '';
+  if(!storagePath || storagePath.startsWith('http')){ toast('No stored document found'); return; }
+  const bucket = a._source === 'Boston Booking Engine' ? 'boston-applications'
+               : a._property === 'boston' ? 'boston-formsite'
+               : a._source === 'NY Summer Booking Engine' ? 'ny-applications'
+               : 'ny-formsite';
+  toast('Scanning document…');
+  await autoScanFromStorage(storagePath, selectedRef, bucket);
 }
 
 // ── RMS CLOUD INTEGRATION ────────────────────────────────
