@@ -2746,22 +2746,20 @@ async function rmsCreateReservation(){
     const monthlyRent = parseFloat((d.monthly_rent||'').replace(/[$,]/g,'')) || 0;
 
     const resPayload = {
-      guestId:          guestId,
-      categoryId:       parseInt(catId),
-      areaId:           parseInt(areaId),
-      propertyId:       parseInt(propId),
-      arrivalDate:      moveIn + ' 14:00:00',
-      departureDate:    moveOut + ' 11:00:00',
-      adults:           parseInt(a.occupants||'1'),
-      status:           'Unconfirmed',
-      notes:            notes || '',
-      season:           d.season || '',
+      guestId:       guestId,
+      categoryId:    parseInt(catId),
+      areaId:        parseInt(areaId),
+      arrivalDate:   moveIn + ' 14:00:00',
+      departureDate: moveOut + ' 11:00:00',
+      adults:        parseInt(a.occupants||'1'),
+      status:        'Unconfirmed',
     };
-    if(bookingSource) resPayload.bookingSourceId = bookingSource;
-    if(brokerName)    resPayload.brokerName      = brokerName;
-    if(commPct)       resPayload.commissionPct   = parseFloat(commPct);
+    if(notes)         resPayload.notes            = notes;
+    if(d.season)      resPayload.season           = d.season;
+    if(brokerName)    resPayload.brokerName        = brokerName;
+    if(commPct)       resPayload.commissionPct     = parseFloat(commPct);
     if(commAmt && commAmt !== '—') resPayload.commissionAmount = parseFloat(commAmt);
-    if(monthlyRent)   resPayload.deposit         = monthlyRent;
+    if(monthlyRent)   resPayload.deposit           = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
 
     const reservation = await rmsCall('/reservations', 'POST', token, resPayload);
