@@ -1091,12 +1091,12 @@ function normalizeSupabaseFormsite(row){
     formsite_source:  raw['26'] || '',
     passport_number: raw['22'] || '',
     passport_expiry: raw['23'] || '',
-    license_url:    raw['65'] || '',
-    enrollment_url: raw['58'] || '',
-    internship_url: '',
-    passport_1_url: raw['57'] || '',
-    i20_1_url:      raw['58'] || '',
-    visa_1_url:     raw['59'] || '',
+    license_url:    raw['57'] || '',  // Driver License/Passport (Domestic)
+    enrollment_url: raw['59'] || '',  // Letter of Enrolment/Acceptance from School
+    internship_url: raw['67'] || '',  // Internship Letter
+    passport_1_url: raw['57'] || '',  // Same as license for domestic (Driver License/Passport)
+    i20_1_url:      raw['58'] || '',  // I-20 (International)
+    visa_1_url:     raw['59'] || '',  // Visa (International)
     _source:   source.includes('Domestic') ? 'Domestic' : 'International',
     _property: property,
     _table:    'formsite_submissions',
@@ -2065,7 +2065,21 @@ function openPanel(ref){
     docHtml += d1.map(([l,k])=>docRow(l, a[k])).join('');
     if(occ >= 2){ docHtml += '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin:14px 0 10px">Licensee 2</div>'; docHtml += d2.map(([l,k])=>docRow(l, a[k])).join(''); }
   } else {
-    const docs = [['Driver License', a.license_url],['Letter of Enrolment / Acceptance', a.enrollment_url],['Internship Letter', a.internship_url],['Passport', a.passport_1_url],['I-20', a.i20_1_url],['Visa', a.visa_1_url]];
+    const isDomestic = (a._source === 'Domestic' || (a.formsite_source && !a.formsite_source.includes('International')));
+    const docs = isDomestic
+      ? [
+          ['Driver License / Passport', a.license_url],
+          ['Letter of Enrolment / Acceptance', a.enrollment_url],
+          ['Internship Letter', a.internship_url],
+        ]
+      : [
+          ['Passport', a.passport_1_url],
+          ['I-20', a.i20_1_url],
+          ['Visa', a.visa_1_url],
+          ['Driver License', a.license_url],
+          ['Enrollment Letter', a.enrollment_url],
+          ['Internship Letter', a.internship_url],
+        ];
     docHtml += docs.filter(([,u])=>u).map(([l,u])=>docRow(l,u)).join('');
     if(!docHtml) docHtml = '<div style="color:var(--t3);font-size:12px;font-style:italic">No document links in this submission.</div>';
   }
