@@ -2082,6 +2082,15 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
+  // Auto-scan passport from Supabase Storage if available
+  setTimeout(()=>{
+    const raw = a.raw_data || {};
+    const storagePath = raw.stored_passport || raw.stored_i20 || raw.stored_license || '';
+    if(storagePath && !storagePath.startsWith('http')){
+      autoScanFromStorage(storagePath, a.ref_number);
+    }
+  }, 800);
+
   // Async load — also fetch history from older entries by same name
   const fullName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
   const olderRefs = apps
@@ -2462,6 +2471,146 @@ function editPanelField(elId, field, el){
   input.onblur=save;
   input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
+// ── DOCUMENT SCANNING (Supabase Storage + Google Vision) ─
+async function autoScanFromStorage(storagePath, ref){
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
+      body: JSON.stringify({ storage_path: storagePath })
+    });
+    if(!res.ok) return;
+    const { text, error } = await res.json();
+    if(error || !text) return;
+
+    const extracted = parsePassportMRZ(text);
+    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth) return;
+
+    const a = apps.find(x=>x.ref_number===ref);
+    if(!a) return;
+
+    const discrepancies = [];
+    const updates = {};
+
+    // DOB - fill if blank
+    if(extracted.date_of_birth){
+      const cached = editableCache[ref]||{};
+      if(!cached.dob){
+        updates.dob = extracted.date_of_birth;
+        const el = document.getElementById('t-dob');
+        if(el) el.textContent = fmtDate(extracted.date_of_birth);
+      }
+    }
+
+    // Nationality - fill if blank
+    if(extracted.nationality){
+      const cached = editableCache[ref]||{};
+      if(!cached.nationality){
+        updates.nationality = extracted.nationality;
+        const el = document.getElementById('t-nationality');
+        if(el) el.textContent = extracted.nationality;
+      }
+    }
+
+    // Check for discrepancies
+    if(extracted.first_name && a.first_name && extracted.first_name.toUpperCase() !== a.first_name.toUpperCase()){
+      discrepancies.push({ field: 'First Name', form: a.first_name, scan: extracted.first_name });
+    }
+    if(extracted.last_name && a.last_name && extracted.last_name.toUpperCase() !== a.last_name.toUpperCase()){
+      discrepancies.push({ field: 'Last Name', form: a.last_name, scan: extracted.last_name });
+    }
+    if(extracted.document_number && a.passport_number && extracted.document_number !== a.passport_number){
+      discrepancies.push({ field: 'Passport Number', form: a.passport_number, scan: extracted.document_number });
+    }
+    if(extracted.expiry_date && a.passport_expiry && extracted.expiry_date !== a.passport_expiry){
+      discrepancies.push({ field: 'Passport Expiry', form: fmtDate(a.passport_expiry), scan: fmtDate(extracted.expiry_date) });
+    }
+
+    // Save updates
+    if(Object.keys(updates).length){
+      editableCache[ref] = {...(editableCache[ref]||{}), ...updates};
+      setNYData(ref, updates);
+    }
+
+    // Show discrepancy warning if any
+    if(discrepancies.length) showScanDiscrepancies(discrepancies, ref, extracted);
+    else if(Object.keys(updates).length) toast('✓ Document scanned — details updated');
+
+  } catch(e){ console.error('Scan error:', e.message); }
+}
+
+function parsePassportMRZ(text){
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const result = { first_name:'', last_name:'', document_number:'', expiry_date:'', date_of_birth:'', nationality:'' };
+  const mrzLines = lines.filter(l=>/^[A-Z0-9<]{30,}$/.test(l));
+  if(mrzLines.length >= 2){
+    const mrz1 = mrzLines[mrzLines.length-2];
+    const mrz2 = mrzLines[mrzLines.length-1];
+    const nameMatch = mrz1.match(/^P<([A-Z]{3})([A-Z<]+)<<([A-Z<]+)/);
+    if(nameMatch){
+      result.nationality = nameMatch[1];
+      result.last_name   = nameMatch[2].replace(/</g,' ').trim();
+      result.first_name  = nameMatch[3].replace(/</g,' ').trim();
+    }
+    if(mrz2.length >= 44){
+      result.document_number = mrz2.substring(0,9).replace(/</g,'').trim();
+      const dob = mrz2.substring(13,19);
+      const exp = mrz2.substring(21,27);
+      if(/^\d{6}$/.test(dob)){
+        const yr = parseInt(dob.substring(0,2));
+        result.date_of_birth = `${yr < 30 ? 2000+yr : 1900+yr}-${dob.substring(2,4)}-${dob.substring(4,6)}`;
+      }
+      if(/^\d{6}$/.test(exp)){
+        const yr = parseInt(exp.substring(0,2));
+        result.expiry_date = `${2000+yr}-${exp.substring(2,4)}-${exp.substring(4,6)}`;
+      }
+    }
+  }
+  return result;
+}
+
+function showScanDiscrepancies(discrepancies, ref, extracted){
+  const existing = document.getElementById('scan-discrepancy-banner');
+  if(existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'scan-discrepancy-banner';
+  banner.style.cssText = 'background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:12px 16px;margin:12px 16px 0;font-size:12px';
+  banner.innerHTML = `
+    <div style="font-weight:600;color:#92400E;margin-bottom:8px">⚠️ Document scan detected differences</div>
+    ${discrepancies.map(d=>`
+      <div style="margin-bottom:6px;color:#78350F">
+        <strong>${d.field}:</strong> Form says "<em>${d.form}</em>" but document shows "<em>${d.scan}</em>"
+        <button onclick="acceptScanValue('${ref}','${d.field}','${d.scan}',this)" 
+          style="margin-left:8px;font-size:11px;background:#1e2847;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer">
+          Use scanned value
+        </button>
+      </div>
+    `).join('')}
+    <div style="margin-top:8px;color:#92400E;cursor:pointer;text-align:right;font-size:11px" onclick="document.getElementById('scan-discrepancy-banner').remove()">Dismiss</div>
+  `;
+
+  const panel = document.getElementById('panel');
+  const firstTab = panel.querySelector('.ptabs');
+  if(firstTab) firstTab.after(banner);
+  else panel.prepend(banner);
+
+  toast('⚠️ Document scan found differences — review below');
+}
+
+function acceptScanValue(ref, field, value, btn){
+  const a = apps.find(x=>x.ref_number===ref);
+  if(!a) return;
+  if(field === 'First Name'){ a.first_name = value; const el=document.getElementById('t-first'); if(el) el.textContent=value; }
+  if(field === 'Last Name'){  a.last_name  = value; const el=document.getElementById('t-last');  if(el) el.textContent=value; }
+  if(field === 'Passport Number'){ const el=document.getElementById('t-passport-num'); if(el) el.textContent=value; }
+  if(field === 'Passport Expiry'){ const el=document.getElementById('t-passport-exp'); if(el) el.textContent=value; }
+  btn.textContent = '✓ Applied';
+  btn.disabled = true;
+  btn.style.background = '#059669';
+  toast(`${field} updated from document ✓`);
+}
+
 // ── RMS CLOUD INTEGRATION ────────────────────────────────
 const RMS_PROXY = `${SUPABASE_URL}/functions/v1/rms-proxy`;
 
