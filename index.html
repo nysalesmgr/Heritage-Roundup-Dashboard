@@ -1247,7 +1247,7 @@ function getPaymentDueDate(ref){
 
 function flCell(ref, field, type){
   const val = field==='payment_due' ? (getNYData(ref)[field] || getPaymentDueDate(ref) || '') : (getNYData(ref)[field]||'');
-  return `<td class="editable-cell" onclick="editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val?' empty':''}">${val||'—'}</span></td>`;
+  return `<td class="editable-cell" onclick="editCell(this,'${escJs(ref)}','${field}','${type}')"><span class="cell-val${!val?' empty':''}">${val?esc(val):'—'}</span></td>`;
 }
 
 let renewalRows = [];
@@ -1287,17 +1287,17 @@ function renderRenewalsPage(){
   if(!filtered.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="10">No renewals yet</td></tr>`; return; }
   tbody.innerHTML = filtered.map(r=>`
     <tr>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','reservation_no','text')"><span class="cell-val${!r.reservation_no?' empty':''}">${r.reservation_no||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','reservation_no','text')"><span class="cell-val${!r.reservation_no?' empty':''}">${esc(r.reservation_no||'—')}</span></td>
       <td><div class="td-name">${esc((r.first_name||'')+' '+(r.last_name||''))}</div></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','unit','text')"><span class="cell-val${!r.unit?' empty':''}">${r.unit||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','unit','text')"><span class="cell-val${!r.unit?' empty':''}">${esc(r.unit||'—')}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtDate(r.move_in):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtDate(r.move_out):'—'}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','monthly_rate','text')"><span class="cell-val${!r.monthly_rate?' empty':''}">${r.monthly_rate||'—'}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','incentives_pct','text')"><span class="cell-val${!r.incentives_pct?' empty':''}">${r.incentives_pct||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','monthly_rate','text')"><span class="cell-val${!r.monthly_rate?' empty':''}">${esc(r.monthly_rate||'—')}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','incentives_pct','text')"><span class="cell-val${!r.incentives_pct?' empty':''}">${esc(r.incentives_pct||'—')}</span></td>
       <td><span class="cell-val">${calcRenewalIncentive(r)}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','agr_date','date')"><span class="cell-val${!r.agr_date?' empty':''}">${r.agr_date?fmtDate(r.agr_date):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','payment_due','date')"><span class="cell-val${!r.payment_due?' empty':''}">${r.payment_due?fmtDate(r.payment_due):'—'}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','remarks','text')"><span class="cell-val${!r.remarks?' empty':''}">${r.remarks||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','remarks','text')"><span class="cell-val${!r.remarks?' empty':''}">${esc(r.remarks||'—')}</span></td>
       <td>${(r.renewal_status||'Active')!=='Payment Received'
         ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd);font-size:11px" onclick="setRenewalStatus('${r.id}','Payment Received')">Payment Received</button>`
         : `<span class="badge paymentreceived">Payment Received</span>`}</td>
@@ -1320,14 +1320,14 @@ function renderRenewals(){
   if(!active.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="9">No active renewals</td></tr>`; return; }
   tbody.innerHTML = active.map(r=>`
     <tr>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','reservation_no','text')"><span class="cell-val${!r.reservation_no?' empty':''}">${r.reservation_no||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','reservation_no','text')"><span class="cell-val${!r.reservation_no?' empty':''}">${esc(r.reservation_no||'—')}</span></td>
       <td><div class="td-name">${esc((r.first_name||'')+' '+(r.last_name||''))}</div></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','unit','text')"><span class="cell-val${!r.unit?' empty':''}">${r.unit||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','unit','text')"><span class="cell-val${!r.unit?' empty':''}">${esc(r.unit||'—')}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtDate(r.move_in):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtDate(r.move_out):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','agr_date','date')"><span class="cell-val${!r.agr_date?' empty':''}">${r.agr_date?fmtDate(r.agr_date):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','payment_due','date')"><span class="cell-val${!r.payment_due?' empty':''}">${r.payment_due?fmtDate(r.payment_due):'—'}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','remarks','text')"><span class="cell-val${!r.remarks?' empty':''}">${r.remarks||'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${r.id}','remarks','text')"><span class="cell-val${!r.remarks?' empty':''}">${esc(r.remarks||'—')}</span></td>
       <td><span style="color:var(--rej);cursor:pointer;font-size:12px" onclick="deleteRenewal('${r.id}')">✕</span></td>
     </tr>`).join('');
 }
@@ -1344,7 +1344,7 @@ function editRenewalCell(td, id, field, type){
   const save = () => {
     const val = input.value;
     if(row) row[field] = val;
-    td.innerHTML=`<span class="cell-val${!val?' empty':''}">${val ? (type==='date'?fmtDate(val):val) : '—'}</span>`;
+    td.innerHTML=`<span class="cell-val${!val?' empty':''}">${val ? (type==='date'?fmtDate(val):esc(val)) : '—'}</span>`;
     fetch(`${SUPABASE_URL}/rest/v1/renewals?id=eq.${id}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body: JSON.stringify({[field]:val})
@@ -1367,7 +1367,7 @@ function editRenewalCell(td, id, field, type){
     }
   };
   input.onblur = save;
-  input.onkeydown = e => { if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val${!cur?' empty':''}">${cur?(type==='date'?fmtDate(cur):cur):'—'}</span>`; } };
+  input.onkeydown = e => { if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val${!cur?' empty':''}">${cur?(type==='date'?fmtDate(cur):esc(cur)):'—'}</span>`; } };
 }
 
 async function deleteRenewal(id){
@@ -1410,8 +1410,8 @@ function renderBlacklistPage(){
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','unit')"><span class="cell-val">${esc(b.unit||'—')}</span></td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','full_name')"><span class="cell-val" style="font-weight:600;color:var(--rej)">${esc(b.full_name||'—')}</span></td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','email')"><span class="cell-val">${esc(b.email||'—')}</span></td>
-      <td class="editable-cell" onclick="editBlacklistRisk(this,'${b.id}','${b.risk_level||'Low Risk'}')">
-        <span class="badge ${b.risk_level==='High Risk'?'todrop':'hold'}">${b.risk_level||'Low Risk'}</span>
+      <td class="editable-cell" onclick="editBlacklistRisk(this,'${b.id}','${esc(b.risk_level||'Low Risk')}')">
+        <span class="badge ${b.risk_level==='High Risk'?'todrop':'hold'}">${esc(b.risk_level||'Low Risk')}</span>
       </td>
       <td class="editable-cell" onclick="editBlacklistCell(this,'${b.id}','reason')"><span class="cell-val" style="white-space:normal;word-break:break-word">${esc(b.reason||'—')}</span></td>
       <td>${esc(b.added_by||'—')}</td>
@@ -1528,7 +1528,7 @@ function renderCompletedPage(){
 }
 
 function appRow(a, showReservation=false){
-  return `<tr onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer">
+  return `<tr onclick="openPanel('${escJs(a.ref_number)}')" style="cursor:pointer">
     <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
     <td>${badge(a.status)}</td>
     ${nyCell(a.ref_number,'season','season')}
@@ -1660,12 +1660,12 @@ function renderFinishLine(){
     const payDue = d.payment_due || getPaymentDueDate(a.ref_number) || '';
     return `<tr>
       ${flCell(a.ref_number,'reservation_no','text')}
-      <td onclick="openPanel('${esc(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
+      <td onclick="openPanel('${escJs(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
       <td><span class="td-unit">${esc(d.unit||'—')}</span></td>
       <td><span class="td-date">${d.move_in?fmtDate(d.move_in):'—'}</span></td>
       <td><span class="td-date">${d.move_out?fmtDate(d.move_out):'—'}</span></td>
-      <td class="editable-cell" onclick="editCell(this,'${esc(a.ref_number)}','agr_date','date')"><span class="cell-val${!agrDateStored?' empty':''}">${agrDateStored?fmtDate(agrDateStored):'—'}</span></td>
-      <td class="editable-cell" onclick="editCell(this,'${esc(a.ref_number)}','payment_due','date')"><span class="cell-val${!payDue?' empty':''}">${payDue?fmtDate(payDue):'—'}</span></td>
+      <td class="editable-cell" onclick="editCell(this,'${escJs(a.ref_number)}','agr_date','date')"><span class="cell-val${!agrDateStored?' empty':''}">${agrDateStored?fmtDate(agrDateStored):'—'}</span></td>
+      <td class="editable-cell" onclick="editCell(this,'${escJs(a.ref_number)}','payment_due','date')"><span class="cell-val${!payDue?' empty':''}">${payDue?fmtDate(payDue):'—'}</span></td>
       ${flCell(a.ref_number,'remarks','text')}
     </tr>`;
   }).join('');
@@ -1686,7 +1686,7 @@ function renderRecent(){
     : `<th>Reference</th><th>Status</th><th>Applicant</th><th>Unit / Type</th><th>Move-in</th><th>Move-out</th><th>Source</th>`;
 
   tbody.innerHTML = recent.map(a=>`
-    <tr onclick="openPanel('${esc(a.ref_number)}')">
+    <tr onclick="openPanel('${escJs(a.ref_number)}')">
       <td>${isNY ? `<span class="td-date">${fmtDate(a.created_at)}</span>` : a._source==='Booking Engine' ? `<span class="td-ref">${esc(a.ref_number||'—')}</span>` : `<span class="td-date">${fmtDate(a.created_at)}</span>`}</td>
       <td>${badge(a.status)}</td>
       <td><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
@@ -1783,9 +1783,9 @@ function editCell(td, ref, field, type){
       if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
-      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${val&&val!=='—'?val:'—'}</span>`;
+      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${val&&val!=='—'?esc(val):'—'}</span>`;
     } else {
-      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?fmtDate(val):val):'—'}</span>`;
+      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?fmtDate(val):esc(val)):'—'}</span>`;
     }
     // Update commission amount if relevant fields changed
     if(['incentives','monthly_rent','move_in','move_out','unit'].includes(field)){
@@ -1799,7 +1799,7 @@ function editCell(td, ref, field, type){
     input.onblur = save;
     input.onkeydown = e => {
       if(e.key==='Enter') input.blur();
-      if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val${!cur||cur==='—'?' empty':''}">${cur&&cur!=='—'?cur:'—'}</span>`; }
+      if(e.key==='Escape'){ td.innerHTML=`<span class="cell-val${!cur||cur==='—'?' empty':''}">${cur&&cur!=='—'?esc(cur):'—'}</span>`; }
     };
   }
 }
@@ -1808,7 +1808,7 @@ function multiDateCell(ref, field){
   const raw = getNYData(ref)[field] || '';
   const dates = raw.split('\n').map(d=>d.trim()).filter(Boolean);
   const display = dates.length ? dates.map(d=>fmtDate(d)).join('<br>') : '—';
-  return `<td class="editable-cell" onclick="event.stopPropagation();openMultiDateEditor('${esc(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
+  return `<td class="editable-cell" onclick="event.stopPropagation();openMultiDateEditor('${escJs(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
 }
 
 function openMultiDateEditor(ref, field, td){
@@ -1819,11 +1819,11 @@ function openMultiDateEditor(ref, field, td){
   let html = `<div style="padding:4px">`;
   dates.forEach((d,i)=>{
     html += `<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
-      <input type="date" value="${d}" onchange="updateMultiDate('${esc(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px;font-family:Inter,sans-serif">
-      <span onclick="deleteMultiDate('${esc(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:12px">✕</span>
+      <input type="date" value="${d}" onchange="updateMultiDate('${escJs(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px;font-family:Inter,sans-serif">
+      <span onclick="deleteMultiDate('${escJs(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:12px">✕</span>
     </div>`;
   });
-  html += `<button onclick="addMultiDate('${esc(ref)}','${field}')" style="font-size:11px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;margin-top:2px">+ Add ${label} Date</button></div>`;
+  html += `<button onclick="addMultiDate('${escJs(ref)}','${field}')" style="font-size:11px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;margin-top:2px">+ Add ${label} Date</button></div>`;
 
   td.innerHTML = html;
   td.onclick = null; // prevent re-opening
@@ -1872,10 +1872,10 @@ function renderPanelViewingDates(ref){
     const label = field==='vmu' ? 'VMU' : 'IPT';
     el.innerHTML = dates.map((d,i)=>`
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <input type="date" value="${d}" onchange="updateMultiDate('${esc(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:Inter,sans-serif">
-        <span onclick="deleteMultiDate('${esc(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:13px">✕</span>
+        <input type="date" value="${d}" onchange="updateMultiDate('${escJs(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:Inter,sans-serif">
+        <span onclick="deleteMultiDate('${escJs(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:13px">✕</span>
       </div>`).join('') +
-      `<button onclick="addMultiDate('${esc(ref)}','${field}')" style="font-size:12px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">+ Add ${label} Date</button>`;
+      `<button onclick="addMultiDate('${escJs(ref)}','${field}')" style="font-size:12px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">+ Add ${label} Date</button>`;
   });
 }
 
@@ -1935,7 +1935,7 @@ function calcCommission(a){
 function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
   const val = cached[field]||(fallback||'');
-  const display = val && val!=='—' ? (type==='date' ? fmtDate(val) : val) : '—';
+  const display = val && val!=='—' ? (type==='date' ? fmtDate(val) : esc(val)) : '—';
   let seasonStyle = '';
   if(field==='season' && val){
     const v = val.toLowerCase();
@@ -1943,7 +1943,7 @@ function nyCell(ref, field, type, fallback){
     else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
     else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
   }
-  return `<td class="editable-cell" onclick="event.stopPropagation();editCell(this,'${esc(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${display}</span></td>`;
+  return `<td class="editable-cell" onclick="event.stopPropagation();editCell(this,'${escJs(ref)}','${field}','${type}')"><span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${display}</span></td>`;
 }
 
 // ── APPLICATIONS TABLE ────────────────────────────────────
@@ -2017,17 +2017,17 @@ function openPanel(ref){
   // Action buttons
   const acts = document.getElementById('pan-acts');
   acts.innerHTML = `
-    ${a.status!=='Pending VMU/IPT'              ? `<button class="btn" style="background:var(--vmu-bg);color:var(--vmu)" onclick="setStatus('${esc(ref)}','Pending VMU/IPT')">Pending VMU/IPT</button>` : ''}
-    ${a.status!=='Recap Sent'               ? `<button class="btn" style="background:var(--recap-bg);color:var(--recap)" onclick="setStatus('${esc(ref)}','Recap Sent')">Recap Sent</button>` : ''}
-    ${a.status!=='Agreement Issued'         ? `<button class="btn" style="background:var(--agr-bg);color:var(--agr)" onclick="setStatus('${esc(ref)}','Agreement Issued')">Agreement Issued</button>` : ''}
-    ${a.status!=='Revived'                  ? `<button class="btn" style="background:var(--revived-bg);color:var(--revived)" onclick="setStatus('${esc(ref)}','Revived')">Revived</button>` : ''}
-    ${a.status!=='To Drop'                  ? `<button class="btn" style="background:var(--todrop-bg);color:var(--todrop)" onclick="setStatus('${esc(ref)}','To Drop')">To Drop</button>` : ''}
-    ${a.status!=='Drop Out ($500)'          ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${esc(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
-    ${a.status!=='Payment Received/Finalized' ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${esc(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
-    ${a.status!=='Renewal' ? `<button class="btn" style="background:var(--renewal-bg);color:var(--renewal)" onclick="setStatus('${esc(ref)}','Renewal')">Renewal</button>` : ''}
-    ${a.status!=='Pending Review'           ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${esc(ref)}','Pending Review')">↩ Reset</button>` : ''}
+    ${a.status!=='Pending VMU/IPT'              ? `<button class="btn" style="background:var(--vmu-bg);color:var(--vmu)" onclick="setStatus('${escJs(ref)}','Pending VMU/IPT')">Pending VMU/IPT</button>` : ''}
+    ${a.status!=='Recap Sent'               ? `<button class="btn" style="background:var(--recap-bg);color:var(--recap)" onclick="setStatus('${escJs(ref)}','Recap Sent')">Recap Sent</button>` : ''}
+    ${a.status!=='Agreement Issued'         ? `<button class="btn" style="background:var(--agr-bg);color:var(--agr)" onclick="setStatus('${escJs(ref)}','Agreement Issued')">Agreement Issued</button>` : ''}
+    ${a.status!=='Revived'                  ? `<button class="btn" style="background:var(--revived-bg);color:var(--revived)" onclick="setStatus('${escJs(ref)}','Revived')">Revived</button>` : ''}
+    ${a.status!=='To Drop'                  ? `<button class="btn" style="background:var(--todrop-bg);color:var(--todrop)" onclick="setStatus('${escJs(ref)}','To Drop')">To Drop</button>` : ''}
+    ${a.status!=='Drop Out ($500)'          ? `<button class="btn" style="background:var(--dropout-bg);color:var(--dropout)" onclick="setStatus('${escJs(ref)}','Drop Out ($500)')">Drop Out ($500)</button>` : ''}
+    ${a.status!=='Payment Received/Finalized' ? `<button class="btn" style="background:var(--payrcvd-bg);color:var(--payrcvd)" onclick="setStatus('${escJs(ref)}','Payment Received/Finalized')">Payment Received/Finalized</button>` : ''}
+    ${a.status!=='Renewal' ? `<button class="btn" style="background:var(--renewal-bg);color:var(--renewal)" onclick="setStatus('${escJs(ref)}','Renewal')">Renewal</button>` : ''}
+    ${a.status!=='Pending Review'           ? `<button class="btn" style="background:#F4F2EE;color:var(--t2);border:1px solid var(--border)" onclick="setStatus('${escJs(ref)}','Pending Review')">↩ Reset</button>` : ''}
     <button class="btn btn-rms" onclick="openRmsModal()">⬡ Create in RMS Cloud</button>
-    <button class="btn" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE" onclick="showLinkStatusPopup('${esc(ref)}', '${esc(a.status)}')">🔗 Link Reservation</button>
+    <button class="btn" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE" onclick="showLinkStatusPopup('${escJs(ref)}', '${escJs(a.status)}')">🔗 Link Reservation</button>
   `;
 
   // Build tabs dynamically
@@ -2174,7 +2174,7 @@ function openPanel(ref){
 
 function docRow(label, url){
   if(!url) return `<div style="margin-bottom:10px"><div class="il-l">${label}</div><div class="il-v"><span class="muted">Not uploaded</span></div></div>`;
-  return `<div style="margin-bottom:10px"><div class="il-l">${label}</div><div class="il-v"><a href="${esc(url)}" target="_blank">View file ↗</a></div></div>`;
+  return `<div style="margin-bottom:10px"><div class="il-l">${label}</div><div class="il-v"><a href="${safeUrl(url)}" target="_blank" rel="noopener noreferrer">View file ↗</a></div></div>`;
 }
 
 function closePanel(){
@@ -2498,7 +2498,7 @@ function editPanelFieldEditable(elId, field, el, type){
     toast(`${field} updated ✓`);
   };
   input.onblur=save;
-  input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur||'—'; } };
+  input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
 
 function editPanelField(elId, field, el){
@@ -2639,8 +2639,8 @@ function showScanDiscrepancies(discrepancies, ref, extracted){
     <div style="font-weight:600;color:#92400E;margin-bottom:8px">⚠️ Document scan detected differences</div>
     ${discrepancies.map(d=>`
       <div style="margin-bottom:6px;color:#78350F">
-        <strong>${d.field}:</strong> Form says "<em>${d.form}</em>" but document shows "<em>${d.scan}</em>"
-        <button onclick="acceptScanValue('${ref}','${d.field}','${d.scan}',this)" 
+        <strong>${esc(d.field)}:</strong> Form says "<em>${esc(d.form)}</em>" but document shows "<em>${esc(d.scan)}</em>"
+        <button onclick="acceptScanValue('${escJs(ref)}','${escJs(d.field)}','${escJs(d.scan)}',this)" 
           style="margin-left:8px;font-size:11px;background:#1e2847;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer">
           Use scanned value
         </button>
@@ -2974,7 +2974,7 @@ function aptTitle(a){
   if(a._source==='Domestic'||a._source==='International') return '—';
   return a.apartment ? a.apartment.split(' | ')[0] : '—';
 }
-function bedroomPill(a){ return a.bedroom_choice ? ` <span style="font-size:10px;background:var(--navy-l);color:var(--navy);padding:1px 6px;border-radius:10px;font-weight:600;text-transform:capitalize">${a.bedroom_choice}</span>` : ''; }
+function bedroomPill(a){ return a.bedroom_choice ? ` <span style="font-size:10px;background:var(--navy-l);color:var(--navy);padding:1px 6px;border-radius:10px;font-weight:600;text-transform:capitalize">${esc(a.bedroom_choice)}</span>` : ''; }
 
 function statusClass(s){
   if(s==='Pending Review')    return 'pending';
@@ -3014,7 +3014,12 @@ function fmtDate(d){
   }catch(e){ return d; }
 }
 function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return d; } }
-function esc(s){ return String(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+// HTML-escape for text and attribute values
+function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// Escape a value placed inside a quoted JS string within an HTML attribute, e.g. onclick="fn('${escJs(x)}')"
+function escJs(s){ return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,'\\n').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// Only allow http(s)/mailto links
+function safeUrl(u){ const v=String(u??'').trim(); return /^(https?:|mailto:)/i.test(v) ? esc(v) : '#'; }
 let toastTimer;
 function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2400); }
 </script>
