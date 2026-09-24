@@ -2,24 +2,17 @@
 // Holds RMS Cloud credentials server-side and forwards a small allow-list of calls
 // from the Heritage dashboard. The browser never sees RMS credentials or tokens.
 //
-// Switch sandbox -> production by changing ONE secret:  RMS_ENV=production
-//
-// Required secrets (supabase secrets set ...):
-//   RMS_ENV                      sandbox | production
-//   RMS_SANDBOX_BASE_URL         e.g. https://restapi12.rmscloud.com
-//   RMS_SANDBOX_AGENT_ID, RMS_SANDBOX_AGENT_PWD, RMS_SANDBOX_CLIENT_ID, RMS_SANDBOX_CLIENT_PWD
-//   RMS_PRODUCTION_BASE_URL
-//   RMS_PRODUCTION_AGENT_ID, RMS_PRODUCTION_AGENT_PWD, RMS_PRODUCTION_CLIENT_ID, RMS_PRODUCTION_CLIENT_PWD
+// Required secrets (supabase secrets set ...) — RMS production credentials:
+//   RMS_BASE_URL                 e.g. https://restapi12.rmscloud.com
+//   RMS_AGENT_ID, RMS_AGENT_PWD, RMS_CLIENT_ID, RMS_CLIENT_PWD
 //   ALLOWED_ORIGIN               the dashboard origin, e.g. https://nysalesmgr.github.io
 
-const ENV = (Deno.env.get("RMS_ENV") ?? "sandbox").toLowerCase() === "production" ? "PRODUCTION" : "SANDBOX";
-const cfg = (k: string) => Deno.env.get(`RMS_${ENV}_${k}`) ?? "";
+const cfg = (k: string) => Deno.env.get(`RMS_${k}`) ?? "";
 const BASE = cfg("BASE_URL").replace(/\/+$/, "");
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "";
 
 // Only the calls the dashboard actually makes. Anything else is rejected.
 const ALLOW: Array<[string, RegExp]> = [
-  ["GET", /^\/_env$/],
   ["GET", /^\/properties\?modelType=basic$/],
   ["GET", /^\/categories\?modelType=basic&propertyId=\d+$/],
   ["GET", /^\/areas\?modelType=basic&propertyId=\d+&limit=\d+$/],
@@ -73,8 +66,7 @@ Deno.serve(async (req) => {
   const method = (req.headers.get("x-rms-method") ?? "GET").toUpperCase();
   if (!ALLOW.some(([m, re]) => m === method && re.test(path))) return json(403, { error: "call not allowed" });
 
-  if (path === "/_env") return json(200, { env: ENV.toLowerCase() });
-  if (!BASE || !cfg("AGENT_ID") || !cfg("CLIENT_ID")) return json(500, { error: `RMS ${ENV} secrets not configured` });
+  if (!BASE || !cfg("AGENT_ID") || !cfg("CLIENT_ID")) return json(500, { error: "RMS secrets not configured" });
 
   const body = method === "POST" ? await req.text() : undefined;
   try {
