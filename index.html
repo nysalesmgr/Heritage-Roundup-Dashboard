@@ -1721,7 +1721,7 @@ function setNYData(ref, data){
     headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify(payload)
   }).then(async r => {
-    if(!r.ok){ const t=await r.text(); console.error('editable_data save error:', r.status, t); }
+    if(!r.ok){ const t=await r.text(); console.error('editable_data save error:', r.status, t); toast('⚠️ Save failed — change not stored. Please try again.'); }
   }).catch(e => console.error('editable_data fetch error:', e));
 
   // Log each changed field to audit history (skip internal/status fields)
@@ -1956,9 +1956,11 @@ function renderTable(){
 
   const EXCLUDED_STATUSES = ['To Drop','Drop Out ($500)','Payment Received/Finalized'];
   
-  // Deduplicate by full name — keep latest per name, per property
+  // Deduplicate by full name — keep latest per name, per property.
+  // Include dropped/finalized entries here so that dropping the latest entry
+  // doesn't make an older duplicate of the same person reappear.
   const nameMap = new Map();
-  apps.filter(a => !EXCLUDED_STATUSES.includes(a.status) && a._property===currentProperty).forEach(a => {
+  apps.filter(a => a._property===currentProperty).forEach(a => {
     const name = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
     if(!name) return;
     const existing = nameMap.get(name);
@@ -2203,10 +2205,11 @@ async function setStatus(ref, newStatus){
     });
     if(!res.ok){ toast('Update failed — check Supabase RLS'); return; }
   } else if(a._table === 'ny_summer_booking_engine'){
-    await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?ref_number=eq.' + encodeURIComponent(ref), {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?ref_number=eq.' + encodeURIComponent(ref), {
       method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ status: newStatus })
     });
+    if(!res.ok){ toast('Update failed — check Supabase RLS'); return; }
   } else {
     setNYStatus(ref, newStatus);
   }
