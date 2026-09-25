@@ -2194,22 +2194,29 @@ function switchTab(name){
 }
 
 // ── STATUS ────────────────────────────────────────────────
+// Update a booking-engine row's status and confirm the database actually changed it.
+// Supabase returns success even when row-level security silently blocks an update,
+// so we ask for the updated rows back and treat "0 rows" as a failure.
+async function patchStatusRow(table, ref, newStatus){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(ref)}`, {
+      method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    if(!res.ok){ console.error('Status update failed', table, ref, res.status, await res.text()); return false; }
+    const rows = await res.json();
+    if(!Array.isArray(rows) || rows.length === 0){ console.error('Status update blocked (0 rows changed)', table, ref); return false; }
+    return true;
+  }catch(e){ console.error('Status update error', table, ref, e); return false; }
+}
+const STATUS_SAVE_FAIL = '⚠️ Status NOT saved — the database blocked the update. Contact admin (Supabase permissions).';
+
 async function setStatus(ref, newStatus){
   const a = apps.find(x=>x.ref_number===ref);
   if(!a) return;
 
-  if(a._table === 'applications'){
-    const res = await fetch(SUPABASE_URL + '/rest/v1/applications?ref_number=eq.' + encodeURIComponent(ref), {
-      method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status: newStatus })
-    });
-    if(!res.ok){ toast('Update failed — check Supabase RLS'); return; }
-  } else if(a._table === 'ny_summer_booking_engine'){
-    const res = await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?ref_number=eq.' + encodeURIComponent(ref), {
-      method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status: newStatus })
-    });
-    if(!res.ok){ toast('Update failed — check Supabase RLS'); return; }
+  if(a._table === 'applications' || a._table === 'ny_summer_booking_engine'){
+    if(!(await patchStatusRow(a._table, ref, newStatus))){ toast(STATUS_SAVE_FAIL); return; }
   } else {
     setNYStatus(ref, newStatus);
   }
@@ -2242,11 +2249,8 @@ async function setStatus(ref, newStatus){
     for(const linkedRef of linkedRefs){
       const la = apps.find(x=>x.ref_number===linkedRef);
       if(!la || la.status===newStatus) continue;
-      if(la._table==='applications'){
-        await fetch(SUPABASE_URL+'/rest/v1/applications?ref_number=eq.'+encodeURIComponent(linkedRef),{
-          method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
-          body: JSON.stringify({status: newStatus})
-        });
+      if(la._table==='applications' || la._table==='ny_summer_booking_engine'){
+        if(!(await patchStatusRow(la._table, linkedRef, newStatus))){ toast(STATUS_SAVE_FAIL); continue; }
       } else {
         setNYStatus(linkedRef, newStatus);
       }
@@ -2355,11 +2359,8 @@ async function applyLinkedStatus(){
   for(const ref of checked){
     const a = apps.find(x=>x.ref_number===ref);
     if(!a) continue;
-    if(a._table==='applications'){
-      await fetch(SUPABASE_URL+'/rest/v1/applications?ref_number=eq.'+encodeURIComponent(ref),{
-        method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
-        body: JSON.stringify({status: newStatus})
-      });
+    if(a._table==='applications' || a._table==='ny_summer_booking_engine'){
+      if(!(await patchStatusRow(a._table, ref, newStatus))){ toast(STATUS_SAVE_FAIL); continue; }
     } else {
       setNYStatus(ref, newStatus);
     }
