@@ -230,7 +230,6 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div class="sb-who">Who are you?</div>
     <div class="staff-grid">
       <button class="sb-btn" onclick="selectStaffForPin('Kyla')">Kyla</button>
-      <button class="sb-btn" onclick="selectStaffForPin('Dianna')">Dianna</button>
       <button class="sb-btn" onclick="selectStaffForPin('Charlotte')">Charlotte</button>
       <button class="sb-btn" onclick="selectStaffForPin('Will')">Will</button>
       <button class="sb-btn" onclick="selectStaffForPin('Jonia')">Jonia</button>
@@ -743,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStaffPins();
 });
 
-const STAFF_LIST = ['Kyla','Dianna','Charlotte','Will','Jonia','Karen','Rhea'];
+const STAFF_LIST = ['Kyla','Charlotte','Will','Jonia','Karen','Rhea'];
 
 // ── SECURITY ─────────────────────────────────────────────
 let pinAttempts = {};
@@ -778,6 +777,7 @@ async function loadStaffPins(){
 function getPin(name){ return staffPins[name] || '8181'; }
 
 function selectStaffForPin(name){
+  if(!STAFF_LIST.includes(name)) return; // removed staff can't sign in
   currentStaff = name;
   pinBuffer = '';
   updateDots();
