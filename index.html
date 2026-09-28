@@ -229,13 +229,13 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div class="l-prop">New York & Boston Dashboard</div>
     <div class="sb-who">Who are you?</div>
     <div class="staff-grid">
-      <button class="sb-btn" onclick="selectStaffForPin('Kyla')">Kyla</button>
       <button class="sb-btn" onclick="selectStaffForPin('Charlotte')">Charlotte</button>
-      <button class="sb-btn" onclick="selectStaffForPin('Will')">Will</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Hannah')">Hannah</button>
       <button class="sb-btn" onclick="selectStaffForPin('Jonia')">Jonia</button>
       <button class="sb-btn" onclick="selectStaffForPin('Karen')">Karen</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Kyla')">Kyla</button>
       <button class="sb-btn" onclick="selectStaffForPin('Rhea')">Rhea</button>
-      <button class="sb-btn" onclick="selectStaffForPin('Hannah')">Hannah</button>
+      <button class="sb-btn" onclick="selectStaffForPin('Will')">Will</button>
     </div>
   </div>
 </div>
@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStaffPins();
 });
 
-const STAFF_LIST = ['Kyla','Charlotte','Will','Jonia','Karen','Rhea','Hannah'];
+const STAFF_LIST = ['Charlotte','Hannah','Jonia','Karen','Kyla','Rhea','Will'];
 
 // ── SECURITY ─────────────────────────────────────────────
 let pinAttempts = {};
