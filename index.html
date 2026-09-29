@@ -2692,13 +2692,14 @@ async function manualScanDocument(){
 // ── RMS CLOUD INTEGRATION ────────────────────────────────
 const RMS_PROXY = `${SUPABASE_URL}/functions/v1/rms-proxy`;
 
-async function rmsCall(path, method='GET', body=null){
+async function rmsCall(path, method='GET', body=null, client=''){
   const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_KEY,
     'x-rms-path': path,
     'x-rms-method': method,
   };
+  if(client) headers['x-rms-client'] = client;
   const opts = { method: 'POST', headers };
   if(body) opts.body = JSON.stringify(body);
   const res = await fetch(RMS_PROXY, opts);
@@ -2708,6 +2709,12 @@ async function rmsCall(path, method='GET', body=null){
 }
 
 let rmsSelectedRef = null;
+
+// The property dropdown value is "<rms account key>|<property id>"
+function rmsSelection(){
+  const [client, propId] = (document.getElementById('rms-property').value || '').split('|');
+  return { client: client || '', propId: propId || '' };
+}
 
 async function openRmsModal(){
   rmsSelectedRef = selectedRef; // store before panel might close
@@ -2721,15 +2728,22 @@ async function openRmsModal(){
 
   try {
 
-    // Load properties
-    const properties = await rmsCall('/properties?modelType=basic', 'GET');
+    // Load properties from every RMS account (one account per property)
+    const clients = await rmsCall('/_clients', 'GET');
     const propSel = document.getElementById('rms-property');
     propSel.innerHTML = '<option value="">Select property…</option>';
-    (Array.isArray(properties) ? properties : properties.result||[]).forEach(p=>{
-      const opt = document.createElement('option');
-      opt.value = p.id; opt.textContent = p.name||p.id;
-      propSel.appendChild(opt);
-    });
+    const failed = [];
+    await Promise.all((Array.isArray(clients) ? clients : []).map(async c => {
+      try{
+        const properties = await rmsCall('/properties?modelType=basic', 'GET', null, c.key);
+        (Array.isArray(properties) ? properties : properties.result||[]).forEach(p=>{
+          const opt = document.createElement('option');
+          opt.value = c.key + '|' + p.id; opt.textContent = p.name || c.name;
+          propSel.appendChild(opt);
+        });
+      }catch(e){ console.error('RMS account failed:', c.name, e.message); failed.push(c.name); }
+    }));
+    if(propSel.options.length <= 1) throw new Error('could not load any RMS property' + (failed.length ? ' ('+failed.join(', ')+')' : ''));
 
     // Show applicant summary
     const d = getNYData(a.ref_number);
@@ -2753,7 +2767,9 @@ async function openRmsModal(){
       }
     } else { linkedSection.style.display = 'none'; }
 
-    document.getElementById('rms-status').textContent = 'Connected ✓ — fill in details below';
+    document.getElementById('rms-status').textContent = failed.length
+      ? `Connected ✓ — but could not reach: ${failed.join(', ')}`
+      : 'Connected ✓ — fill in details below';
     document.getElementById('rms-form').style.display = 'block';
 
   } catch(e){
@@ -2762,11 +2778,11 @@ async function openRmsModal(){
 }
 
 async function rmsLoadAreas(){
-  const propId = document.getElementById('rms-property').value;
+  const { client, propId } = rmsSelection();
   const catId  = document.getElementById('rms-category').value;
   if(!propId || !catId) return;
   try{
-    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET');
+    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET', null, client);
     const allAreas = Array.isArray(res) ? res : res.result||[];
     const catIdNum = parseInt(catId);
     const areas = catId ? allAreas.filter(a=>a.categoryId===catIdNum) : allAreas;
@@ -2780,12 +2796,12 @@ async function rmsLoadAreas(){
   }catch(e){ console.error('Areas load error:', e); }
 }
 async function rmsLoadCategories(){
-  const propId = document.getElementById('rms-property').value;
+  const { client, propId } = rmsSelection();
   if(!propId) return;
   document.getElementById('rms-category').innerHTML = '<option value="">Loading…</option>';
   document.getElementById('rms-area').innerHTML = '<option value="">Select area…</option>';
   try{
-    const cats = await rmsCall(`/categories?modelType=basic&propertyId=${propId}`, 'GET');
+    const cats = await rmsCall(`/categories?modelType=basic&propertyId=${propId}`, 'GET', null, client);
     const catSel = document.getElementById('rms-category');
     catSel.innerHTML = '<option value="">Select category…</option>';
     (Array.isArray(cats) ? cats : cats.result||[]).forEach(c=>{
@@ -2796,10 +2812,10 @@ async function rmsLoadCategories(){
   }catch(e){ console.error('Categories load error:', e); }
 }
 
-async function rmsSearchOrCreateGuest(applicant, idType='', guestStatus=''){
+async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=''){
   // Search first
   const searchData = await rmsCall('/guests/search?modelType=basic', 'POST',
-    { email: applicant.email, given: applicant.first_name, surname: applicant.last_name });
+    { email: applicant.email, given: applicant.first_name, surname: applicant.last_name }, client);
   const results = Array.isArray(searchData) ? searchData : searchData.result||[];
   if(results.length > 0) return results[0].id;
 
@@ -2824,7 +2840,7 @@ async function rmsSearchOrCreateGuest(applicant, idType='', guestStatus=''){
   if(pn && pn.length > 2)    guestPayload.passportNo   = pn;
   const exp = applicant.passport_expiry || d.passport_expiry;
   if(exp)                    guestPayload.idExpiryDate = exp;
-  const guest = await rmsCall('/guests', 'POST', guestPayload);
+  const guest = await rmsCall('/guests', 'POST', guestPayload, client);
   return guest.id || guest.guestId;
 }
 
@@ -2832,7 +2848,7 @@ async function rmsCreateReservation(){
   const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
   if(!a){ toast('No applicant selected'); return; }
 
-  const propId   = document.getElementById('rms-property').value;
+  const { client: rmsClient, propId } = rmsSelection();
   const catId    = document.getElementById('rms-category').value;
   const areaId   = document.getElementById('rms-area').value;
   const notes    = document.getElementById('rms-notes').value;
@@ -2858,7 +2874,7 @@ async function rmsCreateReservation(){
     const guestStatus = a.i20_1_url ? 'Student' : a.internship_url ? 'Intern' : '';
 
     // Create primary guest
-    const guestId = await rmsSearchOrCreateGuest(a, idType, guestStatus);
+    const guestId = await rmsSearchOrCreateGuest(rmsClient, a, idType, guestStatus);
 
     // Create secondary guest if linked
     let secondaryGuestId = null;
@@ -2868,7 +2884,7 @@ async function rmsCreateReservation(){
       if(la){
         const laIdType = la.passport_1_url ? 'Passport' : la.license_url ? 'Driver Licence' : '';
         const laGuestStatus = la.i20_1_url ? 'Student' : la.internship_url ? 'Intern' : '';
-        secondaryGuestId = await rmsSearchOrCreateGuest(la, laIdType, laGuestStatus);
+        secondaryGuestId = await rmsSearchOrCreateGuest(rmsClient, la, laIdType, laGuestStatus);
       }
     }
 
@@ -2903,7 +2919,7 @@ async function rmsCreateReservation(){
     if(monthlyRent)   resPayload.deposit           = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
 
-    const reservation = await rmsCall('/reservations', 'POST', resPayload);
+    const reservation = await rmsCall('/reservations', 'POST', resPayload, rmsClient);
     const resId = reservation.id || reservation.reservationId;
 
     // Save reservation ID back to dashboard
@@ -2937,7 +2953,7 @@ async function rmsCreateReservation(){
             documentName: doc.name,
             documentContent: base64,
             note: doc.note
-          });
+          }, rmsClient);
         } catch(e){ console.warn('Doc upload failed:', doc.note, e.message); }
       }
       toast(`✓ Reservation created + ${docs.length} document(s) uploaded to RMS`);
