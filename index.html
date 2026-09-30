@@ -1757,7 +1757,7 @@ function editCell(td, ref, field, type){
 
   if(type==='season'){
     input = document.createElement('select');
-    const opts = currentProperty==='boston' ? ['—','9 months','12 months'] : ['—','Summer','Fall','Sub-License'];
+    const opts = currentProperty==='boston' ? ['—','9 months','12 months','Spring'] : ['—','Spring','Summer','Fall','Sub-License'];
     opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; input.appendChild(op); });
   } else if(type==='student'){
     input = document.createElement('select');
@@ -1781,7 +1781,8 @@ function editCell(td, ref, field, type){
     if(field==='season'){
       const v = (val||'').toLowerCase();
       let seasonStyle = '';
-      if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      if(v.includes('spring')) seasonStyle = 'background:#DCFCE7;color:#166534;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      else if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${val&&val!=='—'?esc(val):'—'}</span>`;
@@ -1809,10 +1810,10 @@ function multiDateCell(ref, field){
   const raw = getNYData(ref)[field] || '';
   const dates = raw.split('\n').map(d=>d.trim()).filter(Boolean);
   const display = dates.length ? dates.map(d=>fmtDate(d)).join('<br>') : '—';
-  return `<td class="editable-cell" onclick="event.stopPropagation();openMultiDateEditor('${escJs(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
+  return `<td class="editable-cell" data-md="${esc(ref)}|${field}" onclick="event.stopPropagation();openMultiDateEditor('${escJs(ref)}','${field}',this)" style="vertical-align:top"><span class="cell-val" style="white-space:normal">${display}</span></td>`;
 }
 
-function openMultiDateEditor(ref, field, td){
+function openMultiDateEditor(ref, field, td, openLast=false){
   const raw = getNYData(ref)[field] || '';
   const dates = raw.split('\n').map(d=>d.trim()).filter(Boolean);
   const label = field==='vmu' ? 'VMU' : 'IPT';
@@ -1820,14 +1821,21 @@ function openMultiDateEditor(ref, field, td){
   let html = `<div style="padding:4px">`;
   dates.forEach((d,i)=>{
     html += `<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
-      <input type="date" value="${d}" onchange="updateMultiDate('${escJs(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px;font-family:Inter,sans-serif">
+      <input type="date" value="${esc(d)}" onclick="try{this.showPicker()}catch(e){}" onchange="updateMultiDate('${escJs(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px;font-family:Inter,sans-serif">
       <span onclick="deleteMultiDate('${escJs(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:12px">✕</span>
     </div>`;
   });
-  html += `<button onclick="addMultiDate('${escJs(ref)}','${field}')" style="font-size:11px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;margin-top:2px">+ Add ${label} Date</button></div>`;
+  html += `<button onclick="addMultiDate('${escJs(ref)}','${field}',true)" style="font-size:11px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:Inter,sans-serif;margin-top:2px">+ Add ${label} Date</button></div>`;
 
   td.innerHTML = html;
-  td.onclick = null; // prevent re-opening
+  // Keep clicks inside the editor from reaching the row (which opens the side panel
+  // and re-draws the table, closing the editor before the calendar can appear).
+  td.onclick = e => e.stopPropagation();
+  if(openLast){
+    const inputs = td.querySelectorAll('input[type=date]');
+    const last = inputs[inputs.length-1];
+    if(last){ last.focus(); try{ last.showPicker(); }catch(e){} }
+  }
 }
 
 function getMultiDates(ref, field){
@@ -1839,12 +1847,24 @@ function saveMultiDates(ref, field, dates){
   setNYData(ref, { [field]: dates.join('\n') });
 }
 
-function addMultiDate(ref, field){
+function addMultiDate(ref, field, fromTable=false){
   const dates = getMultiDates(ref, field);
   dates.push(new Date().toISOString().slice(0,10));
   saveMultiDates(ref, field, dates);
   renderTable();
-  if(selectedRef === ref) renderPanelViewingDates(ref);
+  if(selectedRef === ref){
+    renderPanelViewingDates(ref);
+    if(!fromTable){
+      const inputs = document.querySelectorAll('#panel-'+field+'-dates input[type=date]');
+      const last = inputs[inputs.length-1];
+      if(last){ last.focus(); try{ last.showPicker(); }catch(e){} }
+    }
+  }
+  if(fromTable){
+    // Re-open the editor in the re-drawn table and show the calendar for the new date
+    const cell = [...document.querySelectorAll('td[data-md]')].find(c => c.dataset.md === ref+'|'+field);
+    if(cell) openMultiDateEditor(ref, field, cell, true);
+  }
   toast((field==='vmu'?'VMU':'IPT') + ' date added ✓');
 }
 
@@ -1873,7 +1893,7 @@ function renderPanelViewingDates(ref){
     const label = field==='vmu' ? 'VMU' : 'IPT';
     el.innerHTML = dates.map((d,i)=>`
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <input type="date" value="${d}" onchange="updateMultiDate('${escJs(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:Inter,sans-serif">
+        <input type="date" value="${esc(d)}" onclick="try{this.showPicker()}catch(e){}" onchange="updateMultiDate('${escJs(ref)}','${field}',${i},this.value)" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:Inter,sans-serif">
         <span onclick="deleteMultiDate('${escJs(ref)}','${field}',${i})" style="color:var(--rej);cursor:pointer;font-size:13px">✕</span>
       </div>`).join('') +
       `<button onclick="addMultiDate('${escJs(ref)}','${field}')" style="font-size:12px;color:var(--navy);background:none;border:1px solid var(--navy);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">+ Add ${label} Date</button>`;
@@ -1940,7 +1960,8 @@ function nyCell(ref, field, type, fallback){
   let seasonStyle = '';
   if(field==='season' && val){
     const v = val.toLowerCase();
-    if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+    if(v.includes('spring')) seasonStyle = 'background:#DCFCE7;color:#166534;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+    else if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
     else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
     else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
   }
