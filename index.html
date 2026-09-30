@@ -1343,7 +1343,7 @@ function editRenewalCell(td, id, field, type){
   input.onclick = e => e.stopPropagation();
   td.innerHTML=''; td.appendChild(input); input.focus();
   const save = () => {
-    const val = input.value;
+    const val = field==='monthly_rate' ? formatMoney(input.value) : input.value;
     if(row) row[field] = val;
     td.innerHTML=`<span class="cell-val${!val?' empty':''}">${val ? (type==='date'?fmtDate(val):esc(val)) : '—'}</span>`;
     fetch(`${SUPABASE_URL}/rest/v1/renewals?id=eq.${id}`, {
@@ -1632,7 +1632,7 @@ async function saveNewRenewal(){
     unit:           document.getElementById('rn-unit').value.trim(),
     move_in:        document.getElementById('rn-movein').value,
     move_out:       document.getElementById('rn-moveout').value,
-    monthly_rate:   document.getElementById('rn-rate').value.trim() || null,
+    monthly_rate:   formatMoney(document.getElementById('rn-rate').value) || null,
     agr_date:       document.getElementById('rn-agr').value,
     payment_due:    document.getElementById('rn-pay').value,
     remarks:        document.getElementById('rn-remarks').value.trim(),
@@ -1775,7 +1775,7 @@ function editCell(td, ref, field, type){
   td.innerHTML=''; td.appendChild(input); input.focus();
 
   const save = () => {
-    const val = input.value;
+    const val = field==='monthly_rent' ? formatMoney(input.value) : input.value;
     setNYData(ref,{[field]:val});
     // For season field, apply colour immediately
     if(field==='season'){
@@ -3056,6 +3056,15 @@ function fmtDate(d){
   }catch(e){ return d; }
 }
 function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return d; } }
+// Format a typed amount as money: 3200 -> $3,200 ; 3200.5 -> $3,200.50. Anything that isn't a plain number is left as typed.
+function formatMoney(v){
+  const raw = String(v ?? '').trim();
+  const n = raw.replace(/[$,\s]/g,'');
+  if(!/^\d+(\.\d+)?$/.test(n)) return raw;
+  const num = parseFloat(n);
+  const hasCents = n.includes('.') && Math.round(num*100) % 100 !== 0;
+  return '$' + num.toLocaleString('en-US', { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 });
+}
 // HTML-escape for text and attribute values
 function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // Escape a value placed inside a quoted JS string within an HTML attribute, e.g. onclick="fn('${escJs(x)}')"
