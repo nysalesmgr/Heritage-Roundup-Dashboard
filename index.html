@@ -1343,7 +1343,7 @@ function editRenewalCell(td, id, field, type){
   input.onclick = e => e.stopPropagation();
   td.innerHTML=''; td.appendChild(input); input.focus();
   const save = () => {
-    const val = field==='monthly_rate' ? formatMoney(input.value) : input.value;
+    const val = field==='monthly_rate' ? formatMoney(input.value) : field==='incentives_pct' ? formatPercent(input.value) : input.value;
     if(row) row[field] = val;
     td.innerHTML=`<span class="cell-val${!val?' empty':''}">${val ? (type==='date'?fmtDate(val):esc(val)) : '—'}</span>`;
     fetch(`${SUPABASE_URL}/rest/v1/renewals?id=eq.${id}`, {
@@ -1773,7 +1773,7 @@ function editCell(td, ref, field, type){
   td.innerHTML=''; td.appendChild(input); input.focus();
 
   const save = () => {
-    const val = field==='monthly_rent' ? formatMoney(input.value) : input.value;
+    const val = field==='monthly_rent' ? formatMoney(input.value) : field==='incentives' ? formatPercent(input.value) : input.value;
     setNYData(ref,{[field]:val});
     // For season field, apply colour immediately
     if(field==='season'){
@@ -3354,6 +3354,13 @@ function formatMoney(v){
   const num = parseFloat(n);
   const hasCents = n.includes('.') && Math.round(num*100) % 100 !== 0;
   return '$' + num.toLocaleString('en-US', { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 });
+}
+// Format a typed commission as a percentage: 10 -> 10% ; 7.5 -> 7.5%. Anything else is left as typed.
+function formatPercent(v){
+  const raw = String(v ?? '').trim();
+  const n = raw.replace(/[%\s]/g,'');
+  if(!/^\d+(\.\d+)?$/.test(n)) return raw;
+  return String(parseFloat(n)) + '%';
 }
 // HTML-escape for text and attribute values
 function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
