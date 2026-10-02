@@ -608,6 +608,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
           <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelFieldEditable('t-dob','dob',this,'date')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelFieldEditable('t-nationality','nationality',this,'text')" style="cursor:pointer">—</div></div>
+          <div><div class="il-l">Gender</div><div class="il-v editable-field" id="t-gender" onclick="editGender(this)" style="cursor:pointer">—</div></div>
           <div style="grid-column:1/-1;margin-top:4px"><button onclick="manualScanDocument()" style="font-size:11px;background:var(--navy);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">🔍 Scan Document</button></div>
         </div>
       </div>
@@ -1700,7 +1701,7 @@ function getNYData(ref){ return editableCache[ref] || {}; }
 const FIELD_LABELS = {
   unit:'Unit', move_in:'Move-in', move_out:'Move-out', monthly_rent:'Monthly Rent',
   incentives:'Commission %', vmu:'VMU Date', ipt:'IPT Date', student_status:'Student Status',
-  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan',
+  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan', gender:'Gender',
   reservation_no:'Reservation #', agr_date:'Agreement Date', payment_due:'Payment Due', remarks:'Remarks'
 };
 
@@ -1708,7 +1709,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','payment_plan','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','payment_plan','updated_at'];
   const raw = { ...editableCache[ref], ref_number: ref, property: currentProperty, updated_at: new Date().toISOString() };
   const payload = {};
   allowed.forEach(k => { if(raw[k] !== undefined) payload[k] = raw[k]; });
@@ -2089,6 +2090,7 @@ function openPanel(ref){
     document.getElementById('t-passport-exp').textContent = a.passport_expiry ? fmtDate(a.passport_expiry) : '—';
     document.getElementById('t-dob').textContent = getNYData(a.ref_number).dob ? fmtDate(getNYData(a.ref_number).dob) : '—';
     document.getElementById('t-nationality').textContent = getNYData(a.ref_number).nationality || '—';
+    document.getElementById('t-gender').textContent = getNYData(a.ref_number).gender || '—';
   }
 
   
@@ -2152,7 +2154,7 @@ function openPanel(ref){
   // Auto-read date of birth / nationality from the passport (only while they're still blank)
   setTimeout(()=>{
     const cached = editableCache[a.ref_number] || {};
-    if(cached.dob && cached.nationality) return;
+    if(cached.dob && cached.nationality && cached.gender) return;
     const src = passportScanSource(a);
     if(src) scanPassport(src, a.ref_number);
   }, 800);
@@ -2495,6 +2497,24 @@ async function saveNotes(){  if(!selectedRef) return;
 }
 
 // ── PANEL FIELD EDITING ───────────────────────────────────
+const GENDERS = ['Male','Female'];
+function editGender(el){
+  if(!selectedRef || el.querySelector('select')) return;
+  const cur = getNYData(selectedRef).gender || '';
+  const sel = document.createElement('select');
+  sel.innerHTML = '<option value="">—</option>' + GENDERS.map(g=>`<option${g===cur?' selected':''}>${g}</option>`).join('');
+  sel.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
+  sel.onclick = e => e.stopPropagation();
+  el.innerHTML=''; el.appendChild(sel); sel.focus();
+  sel.onchange = () => { setNYData(selectedRef, { gender: sel.value }); el.textContent = sel.value || '—'; toast('Gender updated ✓'); };
+  sel.onblur = () => { el.textContent = getNYData(selectedRef).gender || '—'; };
+}
+// Driver licence / ID card: "SEX F", "Sex: M", "15 SEX M" …
+function genderFromID(text){
+  const m = String(text||'').toUpperCase().match(/\bSEX\s*[:.]?\s*(?:\d{1,2}\s*)?([MF])\b/);
+  return m ? (m[1]==='M' ? 'Male' : 'Female') : '';
+}
+
 // Occupants: 1 by default, plus one for each linked applicant (normally 2 when linked)
 function occupantCount(ref){ return 1 + getLinkedRefs(ref).length; }
 
@@ -2570,14 +2590,14 @@ function editPanelField(elId, field, el){
 // Where to read the passport from: a stored copy in Supabase Storage, or the uploaded file's link
 function passportScanSource(a){
   const raw = a.raw_data || {};
-  const path = raw.stored_passport || '';
+  const path = raw.stored_passport || raw.stored_license || '';
   if(path && !path.startsWith('http')){
     const bucket = a._table === 'applications' ? 'boston-applications'
                  : a._table === 'ny_summer_booking_engine' ? 'ny-applications'
                  : a._property === 'boston' ? 'boston-formsite' : 'ny-formsite';
     return { storage_path: path, bucket };
   }
-  const url = a.passport_1_url || (path.startsWith('http') ? path : '');
+  const url = a.passport_1_url || a.license_url || (path.startsWith('http') ? path : '');
   return url && /^https?:/i.test(url) ? { url } : null;
 }
 // Kept for older callers
@@ -2595,7 +2615,8 @@ async function scanPassport(source, ref, manual=false){
     if(error || !text){ if(manual) toast('Could not read the document'); return; }
 
     const extracted = parsePassportMRZ(text);
-    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth){
+    if(!extracted.gender) extracted.gender = genderFromID(text);
+    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth && !extracted.gender){
       if(manual) toast('No passport details found on this document');
       return;
     }
@@ -2626,6 +2647,16 @@ async function scanPassport(source, ref, manual=false){
       }
     }
 
+    // Gender - fill if blank (passport MRZ, or "SEX M/F" on a driver licence / ID)
+    if(extracted.gender){
+      const cached = editableCache[ref]||{};
+      if(!cached.gender){
+        updates.gender = extracted.gender;
+        const el = document.getElementById('t-gender');
+        if(el && selectedRef === ref) el.textContent = extracted.gender;
+      }
+    }
+
     // Check for discrepancies
     if(extracted.first_name && a.first_name && extracted.first_name.toUpperCase() !== a.first_name.toUpperCase()){
       discrepancies.push({ field: 'First Name', form: a.first_name, scan: extracted.first_name });
@@ -2648,7 +2679,7 @@ async function scanPassport(source, ref, manual=false){
 
     // Show discrepancy warning if any
     if(discrepancies.length) showScanDiscrepancies(discrepancies, ref, extracted);
-    else if(Object.keys(updates).length) toast('✓ Passport read — date of birth / nationality filled in');
+    else if(Object.keys(updates).length) toast('✓ Document read — details filled in');
     else if(manual) toast('Passport read — nothing new to fill in');
 
   } catch(e){ console.error('Scan error:', e.message); }
@@ -2665,7 +2696,7 @@ function mrzCheck(str){
   return sum % 10;
 }
 function parsePassportMRZ(text){
-  const result = { first_name:'', last_name:'', document_number:'', expiry_date:'', date_of_birth:'', nationality:'' };
+  const result = { first_name:'', last_name:'', document_number:'', expiry_date:'', date_of_birth:'', nationality:'', gender:'' };
   const lines = String(text||'').split('\n')
     .map(l=>l.replace(/\s+/g,'').replace(/«/g,'<').toUpperCase())
     .filter(l=>/^[A-Z0-9<]{10,46}$/.test(l));
@@ -2687,6 +2718,8 @@ function parsePassportMRZ(text){
   const nat = l2.substring(10,13).replace(/</g,'');
   const issuer = nm ? nm[1].replace(/</g,'') : '';
   result.nationality = MRZ_A3_TO_A2[nat] ? nat : (MRZ_A3_TO_A2[issuer] ? issuer : '');
+  const sex = l2[20];
+  if(sex==='M') result.gender = 'Male'; else if(sex==='F') result.gender = 'Female';
   const dob = l2.substring(13,19), exp = l2.substring(21,27);
   if(/^\d{6}$/.test(dob) && mrzCheck(dob) === +l2[19]){
     const yr = +dob.slice(0,2), nowYY = +todayNY().slice(2,4);
