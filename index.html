@@ -2848,8 +2848,11 @@ async function rmsCall(path, method='GET', body=null, client=''){
 let rmsSelectedRef = null;
 
 // RMS custom reservation fields (confirmed from reservation 1484, Soho):
-//   userDefined3 = Commission %, userDefined5 = Payment Terms, userDefined6 = Season
-const RMS_UDF = { commissionPct: 'userDefined3', paymentTerms: 'userDefined5', season: 'userDefined6' };
+//   userDefined2 = Commission Amount (from 1607), userDefined3 = Commission %,
+//   userDefined5 = Payment Terms, userDefined6 = Season
+const RMS_UDF = { commissionAmt: 'userDefined2', commissionPct: 'userDefined3', paymentTerms: 'userDefined5', season: 'userDefined6' };
+// RMS shows commission amount as "$ 2,457.00"
+const rmsMoney = v => { const n = parseFloat(String(v||'').replace(/[$,\s]/g,'')); return isNaN(n) ? '' : '$ ' + n.toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); };
 // Dashboard Season -> wording used in RMS (anything not listed is sent as it is)
 const RMS_SEASON_TEXT = { 'fall': 'Full Academic Year' };
 const rmsSeason = v => RMS_SEASON_TEXT[String(v||'').trim().toLowerCase()] || String(v||'').trim();
@@ -3221,6 +3224,7 @@ async function rmsCreateReservation(){
     if(bookingSourceId) resPayload.bookingSourceId = bookingSourceId;
     if(paymentTerms)    resPayload[RMS_UDF.paymentTerms]  = paymentTerms;
     if(rmsPct(commPct)) resPayload[RMS_UDF.commissionPct] = rmsPct(commPct);
+    if(rmsMoney(commAmt)) resPayload[RMS_UDF.commissionAmt] = rmsMoney(commAmt);
     if(monthlyRent)   resPayload.deposit           = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
 
