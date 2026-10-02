@@ -739,7 +739,7 @@ let editableCache = {};
 // ── BOOT ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('overview-date').textContent =
-    new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    new Date().toLocaleDateString('en-GB',{timeZone:NY_TZ,weekday:'long',day:'numeric',month:'long',year:'numeric'}) + ' (New York)';
   loadStaffPins();
 });
 
@@ -1241,9 +1241,7 @@ function getPaymentDueDate(ref){
   if(stored) return stored;
   const agrDate = getAgreementDate(ref);
   if(!agrDate) return null;
-  const d = new Date(agrDate);
-  d.setDate(d.getDate()+2);
-  return d.toISOString().slice(0,10);
+  return addDaysISO(toNYDate(agrDate) || agrDate, 2);
 }
 
 function flCell(ref, field, type){
@@ -1356,8 +1354,7 @@ function editRenewalCell(td, id, field, type){
     }
     // Auto-populate payment_due as T+2 when agr_date is set
     if(field==='agr_date' && val){
-      const due = new Date(val); due.setDate(due.getDate()+2);
-      const dueStr = due.toISOString().slice(0,10);
+      const dueStr = addDaysISO(val, 2);
       if(row && !row.payment_due){
         row.payment_due = dueStr;
         fetch(`${SUPABASE_URL}/rest/v1/renewals?id=eq.${id}`, {
@@ -1572,8 +1569,8 @@ async function saveNewApplication(){
     return;
   }
   // Generate ref number BOS-YYMMDDXX
-  const now = new Date();
-  const ref = 'BOS-' + now.getFullYear().toString().slice(2) + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + String(Math.floor(Math.random()*99)+1).padStart(2,'0');
+  const [ny_y, ny_m, ny_d] = todayNY().split('-');
+  const ref = 'BOS-' + ny_y.slice(2) + ny_m + ny_d + String(Math.floor(Math.random()*99)+1).padStart(2,'0');
 
   const payload = {
     ref_number:    ref,
@@ -1607,8 +1604,8 @@ async function saveNewApplication(){
 
 function openAddRenewal(){
   // Auto-set agreement date to today and payment due T+2
-  const today = new Date().toISOString().slice(0,10);
-  const due = new Date(); due.setDate(due.getDate()+2);
+  const today = todayNY();
+  const due = addDaysISO(today, 2);
   document.getElementById('rn-first').value='';
   document.getElementById('rn-last').value='';
   document.getElementById('rn-res').value='';
@@ -1676,9 +1673,8 @@ function renderFinishLine(){
 function renderRecent(){
   const tbody = document.getElementById('recent-tbody');
   const isNY = currentProperty === 'newyork';
-  const today = new Date(); today.setHours(0,0,0,0);
-  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-  const recent = apps.filter(a=>{ if(!a.created_at) return false; const d=new Date(a.created_at.replace(' ','T')); d.setHours(0,0,0,0); return d >= yesterday; });
+  const yesterday = addDaysISO(todayNY(), -1);
+  const recent = apps.filter(a=>{ if(!a.created_at) return false; const d = toNYDate(a.created_at); return d && d >= yesterday; });
   if(!recent.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="7">No applications today or yesterday</td></tr>`; return; }
 
   // Update headers dynamically
@@ -1849,7 +1845,7 @@ function saveMultiDates(ref, field, dates){
 
 function addMultiDate(ref, field, fromTable=false){
   const dates = getMultiDates(ref, field);
-  dates.push(new Date().toISOString().slice(0,10));
+  dates.push(todayNY());
   saveMultiDates(ref, field, dates);
   renderTable();
   if(selectedRef === ref){
@@ -2250,11 +2246,10 @@ async function setStatus(ref, newStatus){
   if(newStatus === 'Agreement Issued'){
     const existing = editableCache[ref] || {};
     if(!existing.agr_date){
-      const today = new Date();
-      const due = new Date(today); due.setDate(due.getDate()+2);
+      const today = todayNY();
       setNYData(ref, {
-        agr_date: today.toISOString().slice(0,10),
-        payment_due: due.toISOString().slice(0,10)
+        agr_date: today,
+        payment_due: addDaysISO(today, 2)
       });
     }
   }
@@ -2281,8 +2276,8 @@ async function setStatus(ref, newStatus){
       if(newStatus==='Agreement Issued'){
         const existing = editableCache[linkedRef]||{};
         if(!existing.agr_date){
-          const today=new Date(); const due=new Date(today); due.setDate(due.getDate()+2);
-          setNYData(linkedRef,{agr_date:today.toISOString().slice(0,10),payment_due:due.toISOString().slice(0,10)});
+          const today=todayNY();
+          setNYData(linkedRef,{agr_date:today,payment_due:addDaysISO(today,2)});
         }
       }
     }
@@ -2391,8 +2386,8 @@ async function applyLinkedStatus(){
     if(newStatus==='Agreement Issued'){
       const existing = editableCache[ref]||{};
       if(!existing.agr_date){
-        const today=new Date(); const due=new Date(today); due.setDate(due.getDate()+2);
-        setNYData(ref,{agr_date:today.toISOString().slice(0,10),payment_due:due.toISOString().slice(0,10)});
+        const today=todayNY();
+        setNYData(ref,{agr_date:today,payment_due:addDaysISO(today,2)});
       }
     }
   }
@@ -2406,7 +2401,7 @@ function closeLinkStatusModal(){ document.getElementById('link-status-modal').st
 
 async function runDiagnostics(){
   document.getElementById('diag-modal').style.display = 'flex';
-  document.getElementById('diag-timestamp').textContent = 'Running checks… ' + new Date().toLocaleString('en-GB');
+  document.getElementById('diag-timestamp').textContent = 'Running checks… ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ET';
   document.getElementById('diag-results').innerHTML = '<div style="color:var(--t3);font-size:13px">Checking…</div>';
 
   const checks = [];
@@ -2464,7 +2459,7 @@ async function runDiagnostics(){
   const summary = `<div style="font-size:13px;font-weight:700;margin-bottom:12px;color:${passed===total?'var(--agr)':'var(--rej)'}">${passed}/${total} checks passed</div>`;
 
   document.getElementById('diag-results').innerHTML = summary + html;
-  document.getElementById('diag-timestamp').textContent = 'Last run: ' + new Date().toLocaleString('en-GB');
+  document.getElementById('diag-timestamp').textContent = 'Last run: ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ET';
 }
 
 async function saveRemarks(){
@@ -3006,7 +3001,7 @@ function exportCSV(){
   const blob = new Blob([csv],{type:'text/csv'});
   const url  = URL.createObjectURL(blob);
   const el   = document.createElement('a');
-  el.href=url; el.download=`heritage-${prop}-${new Date().toISOString().slice(0,10)}.csv`; el.click();
+  el.href=url; el.download=`heritage-${prop}-${todayNY()}.csv`; el.click();
   URL.revokeObjectURL(url);
   toast('CSV exported ✓');
 }
@@ -3041,21 +3036,56 @@ function srcBadge(s){
   const cls = s==='Booking Engine' ? 'src-supabase' : s==='NY Summer Booking Engine' ? 'src-supabase' : s==='International' ? 'src-international' : 'src-domestic';
   return `<span class="src-badge ${cls}">${s||'—'}</span>`;
 }
+// ── NEW YORK TIME ─────────────────────────────────────────
+// All dates and times on the dashboard follow New York time (EST/EDT), whatever
+// time zone the viewer's computer is set to.
+const NY_TZ = 'America/New_York';
+// Calendar date in New York as YYYY-MM-DD (default: now)
+function nyDateISO(date = new Date()){
+  return new Intl.DateTimeFormat('en-CA', { timeZone: NY_TZ, year:'numeric', month:'2-digit', day:'2-digit' }).format(date);
+}
+// True when a timestamp carries its own time zone (e.g. ...T21:10:04+00:00 or ...Z)
+function hasTZ(v){ return /\d{2}:\d{2}(:\d{2}(\.\d+)?)?\s*(Z|[+-]\d{2}(:?\d{2})?)$/i.test(String(v).trim()); }
+function todayNY(){ return nyDateISO(new Date()); }
+// Add whole days to a YYYY-MM-DD date (no time-zone drift)
+function addDaysISO(iso, n){
+  const [y,m,d] = String(iso).slice(0,10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d + n));
+  return dt.toISOString().slice(0,10);
+}
+// Turn a stored value into a New York calendar date (YYYY-MM-DD), or '' if unreadable.
+// Plain dates and timestamps without a time zone are taken as already written.
+function toNYDate(d){
+  const v = String(d||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const hasZone = hasTZ(v);
+  if(!hasZone && /^\d{4}-\d{2}-\d{2}[ T]/.test(v)) return v.slice(0,10);
+  const date = new Date(v);
+  return isNaN(date.getTime()) ? '' : nyDateISO(date);
+}
 function fmtDate(d){
   if(!d||d==='—') return '—';
   try{
-    let date;
-    if(/^\d{4}-\d{2}-\d{2}$/.test(d)) date = new Date(d+'T12:00:00');
-    else if(d.includes(' ')&&d.length>10) date = new Date(d.replace(' ','T'));
-    else date = new Date(d);
-    if(isNaN(date.getTime())) return d;
-    const dd = String(date.getDate()).padStart(2,'0');
-    const mm = String(date.getMonth()+1).padStart(2,'0');
-    const yyyy = date.getFullYear();
+    const iso = toNYDate(d);
+    if(!iso) return d;
+    const [yyyy,mm,dd] = iso.split('-');
     return `${dd}-${mm}-${yyyy}`;
   }catch(e){ return d; }
 }
-function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return d; } }
+function fmtDateTime(d){
+  if(!d) return '—';
+  try{
+    const v = String(d).trim();
+    // No time zone in the value: show it exactly as written
+    if(!hasTZ(v) && /^\d{4}-\d{2}-\d{2}/.test(v)){
+      const time = (v.match(/[ T](\d{2}:\d{2})/)||[])[1];
+      return fmtDate(v.slice(0,10)) + (time ? ', ' + time : '');
+    }
+    const date = new Date(v);
+    if(isNaN(date.getTime())) return d;
+    return date.toLocaleString('en-GB',{ timeZone: NY_TZ, day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' ET';
+  }catch(e){ return d; }
+}
 // Format a typed amount as money: 3200 -> $3,200 ; 3200.5 -> $3,200.50. Anything that isn't a plain number is left as typed.
 function formatMoney(v){
   const raw = String(v ?? '').trim();
