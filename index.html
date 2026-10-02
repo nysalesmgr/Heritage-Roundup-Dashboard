@@ -3009,8 +3009,14 @@ async function openRmsModal(){
     if(linkedRefs.length){
       const la = apps.find(x=>x.ref_number===linkedRefs[0]);
       if(la){
+        const laUnit = rmsDashboardUnit(la), myUnit = rmsDashboardUnit(a);
+        const sameUnit = laUnit && myUnit && rmsNorm(laUnit) === rmsNorm(myUnit);
+        const total = rentOf(a) + (sameUnit ? 0 : rentOf(la));
         document.getElementById('rms-linked-summary').innerHTML = `
-          <div><strong>${esc(la.first_name||'')} ${esc(la.last_name||'')}</strong> · ${esc(la.email||'—')}</div>
+          <div><strong>${esc(la.first_name||'')} ${esc(la.last_name||'')}</strong> · ${esc(la.email||'—')} · Unit: ${esc(laUnit||'—')}</div>
+          <div style="color:var(--t3);margin-top:4px">${sameUnit
+            ? 'Same unit — one booking with Adults 2.'
+            : `A second booking is created for them (unit ${esc(laUnit||'?')}, Adults 1, no charges). The main booking carries the whole-unit deposit <strong>${formatMoney(String(total))}</strong> and commission.`}</div>
         `;
         linkedSection.style.display = 'block';
       }
@@ -3224,6 +3230,61 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
   return guest.id || guest.guestId;
 }
 
+// Money helpers for linked bookings
+const rentOf = app => parseFloat((getNYData(app.ref_number).monthly_rent||'').replace(/[$,]/g,'')) || 0;
+const commAmtOf = app => parseFloat(String(calcCommission(app)||'').replace(/[$,]/g,'')) || 0;
+const idTypeOf = app => getNYData(app.ref_number).id_type || (app.passport_1_url ? 'Passport' : app.license_url ? 'Driver Licence' : '');
+
+// Attach an applicant's documents to an RMS reservation
+async function rmsUploadDocs(client, resId, app){
+  const all = [
+    { url: app.passport_1_url, name: 'Passport.jpg', note: 'Passport' },
+    { url: app.license_url,    name: 'DriverLicense.jpg', note: 'Driver License' },
+    { url: app.i20_1_url,      name: 'I20.jpg', note: 'I-20' },
+    { url: app.visa_1_url,     name: 'Visa.jpg', note: 'Visa' },
+    { url: app.enrollment_url, name: 'EnrollmentLetter.jpg', note: 'Enrollment Letter' },
+    { url: app.internship_url, name: 'InternshipOffer.jpg', note: 'Internship Offer Letter' },
+  ].filter(x => x.url);
+  const seen = new Set();
+  const docs = all.filter(x => { if(seen.has(x.url)) return false; seen.add(x.url); return true; });
+  let n = 0;
+  for(const doc of docs){
+    try{
+      const scanRes = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
+        body: JSON.stringify({ url: doc.url, mode: 'upload' })
+      });
+      const { base64 } = await scanRes.json();
+      if(!base64) continue;
+      await rmsCall(`/reservations/${resId}/document`, 'POST', { documentName: doc.name, documentContent: base64, note: doc.note }, client);
+      n++;
+    }catch(e){ console.warn('Doc upload failed:', doc.note, e.message); }
+  }
+  return n;
+}
+
+// The linked applicant who gets their own (second) booking, with their unit resolved in RMS.
+// Returns null when there's no linked applicant, or when they share the main unit (one booking).
+async function rmsSecondBooking(client, propId, main, mainAreaId){
+  const ref = getLinkedRefs(main.ref_number)[0];
+  const la = ref ? apps.find(x=>x.ref_number===ref) : null;
+  if(!la) return null;
+  const unit = rmsDashboardUnit(la);
+  if(!unit) throw new Error(`Linked applicant ${la.first_name||''} ${la.last_name||''} has no Unit on the dashboard — add their unit first.`);
+  const area = rmsMatchArea(await rmsAllAreas(client, propId), unit);
+  if(!area) throw new Error(`Linked applicant's unit "${unit}" wasn't found at this property in RMS.`);
+  if(String(area.id) === String(mainAreaId)) return null; // same unit → one booking for both
+  const dates = rmsStayDates(la);
+  const stay = (dates.moveIn && dates.moveOut) ? dates : rmsStayDates(main);
+  const free = await rmsCall('/availableAreas', 'POST', {
+    propertyId: parseInt(propId), categoryIds: [area.categoryId],
+    dateFrom: stay.moveIn + ' 15:00:00', dateTo: stay.moveOut + ' 11:00:00',
+  }, client);
+  if(!(Array.isArray(free) ? free : free.result||[]).some(x => String(x.id) === String(area.id)))
+    throw new Error(`Linked applicant's unit "${unit}" is not available for ${fmtDate(stay.moveIn)} – ${fmtDate(stay.moveOut)}.`);
+  return { la, area, stay };
+}
+
 async function rmsCreateReservation(){
   const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
   if(!a){ toast('No applicant selected'); return; }
@@ -3240,134 +3301,92 @@ async function rmsCreateReservation(){
   const { moveIn, moveOut } = rmsStayDates(a);
   if(!moveIn || !moveOut){ errEl.textContent = 'Move-in and move-out dates are required.'; return; }
 
-  document.getElementById('rms-submit-btn').textContent = 'Creating…';
-  document.getElementById('rms-submit-btn').disabled = true;
+  const btn = document.getElementById('rms-submit-btn');
+  btn.textContent = 'Creating…'; btn.disabled = true;
   errEl.textContent = '';
 
   try {
+    if(!d.season) throw new Error('Season is required by RMS — set the Season on the dashboard first.');
 
-    // Determine ID type from uploaded documents
-    const idType = getNYData(a.ref_number).id_type || (a.passport_1_url ? 'Passport' : a.license_url ? 'Driver Licence' : '');
+    // Linked applicant in a different unit → a second booking (checked before anything is created)
+    const second = await rmsSecondBooking(rmsClient, propId, a, areaId);
 
-    // Determine guest status from uploaded documents
-    const guestStatus = a.i20_1_url ? 'Student' : a.internship_url ? 'Intern' : '';
-
-    // Create primary guest
-    const guestId = await rmsSearchOrCreateGuest(rmsClient, a, idType, guestStatus);
-
-    // Create secondary guest if linked
-    let secondaryGuestId = null;
-    const linkedRefs = getLinkedRefs(a.ref_number);
-    if(linkedRefs.length){
-      const la = apps.find(x=>x.ref_number===linkedRefs[0]);
-      if(la){
-        const laIdType = getNYData(la.ref_number).id_type || (la.passport_1_url ? 'Passport' : la.license_url ? 'Driver Licence' : '');
-        const laGuestStatus = la.i20_1_url ? 'Student' : la.internship_url ? 'Intern' : '';
-        secondaryGuestId = await rmsSearchOrCreateGuest(rmsClient, la, laIdType, laGuestStatus);
-      }
-    }
-
-    // Create reservation — fields follow the NY Sales RMS field list
-    // Booking Source = the dashboard Source (the part before " - " if a broker name follows)
+    // Shared values (same on both bookings), per the NY Sales RMS field list
     const leadSource = d.lead_source || a.formsite_source || '';
     const paymentTerms = getPaymentPlan(a);
     const [rateTypeId, bookingSourceId] = await Promise.all([
       rmsRateTypeId(rmsClient),
       rmsBookingSourceId(rmsClient, leadSource.trim()).catch(()=>0),
     ]);
-    if(!d.season) throw new Error('Season is required by RMS — set the Season on the dashboard first.');
+    const shared = { status: 'Unconfirmed', rateTypeId, [RMS_UDF.season]: rmsSeason(d.season) };
+    if(bookingSourceId) shared.bookingSourceId = bookingSourceId;
+    if(paymentTerms)    shared[RMS_UDF.paymentTerms] = paymentTerms;
 
-    // Get commission values
+    // Charges go on the main booking only, for the whole unit:
+    // deposit = both monthly rents, commission amount = both commissions
+    const deposit = rentOf(a) + (second ? rentOf(second.la) : 0);
+    const commAmt = commAmtOf(a) + (second ? commAmtOf(second.la) : 0);
     const commPct = d.incentives || '';
-    const commAmt = calcCommission(a).replace(/[$,]/g,'');
 
-    // Get monthly rent for deposit
-    const monthlyRent = parseFloat((d.monthly_rent||'').replace(/[$,]/g,'')) || 0;
-
-    const resPayload = {
-      guestId:       guestId,
-      categoryId:    parseInt(catId),
-      areaId:        parseInt(areaId),
-      arrivalDate:   moveIn + ' 15:00:00',   // RMS default check-in 3:00 PM
-      departureDate: moveOut + ' 11:00:00',
-      adults:        occupantCount(a.ref_number),
-      status:        'Unconfirmed',
-      rateTypeId:    rateTypeId,
-      [RMS_UDF.season]: rmsSeason(d.season),
+    // ── Main booking ──
+    const guestId = await rmsSearchOrCreateGuest(rmsClient, a, idTypeOf(a));
+    const mainPayload = {
+      guestId, categoryId: parseInt(catId), areaId: parseInt(areaId),
+      arrivalDate: moveIn + ' 15:00:00', departureDate: moveOut + ' 11:00:00',   // RMS default times
+      adults: occupantCount(a.ref_number), ...shared,
     };
-    if(notes)           resPayload.notes           = notes;
-    if(bookingSourceId) resPayload.bookingSourceId = bookingSourceId;
-    if(paymentTerms)    resPayload[RMS_UDF.paymentTerms]  = paymentTerms;
-    // Commission % — on the RMS screen this is the Company field (companyId), confirmed on booking 1936
-    try{ const compId = await rmsCommissionCompanyId(rmsClient, commPct); if(compId) resPayload.companyId = compId; else if(commPct) toast('⚠️ Commission % ' + commPct + ' not found in RMS — set it in RMS'); }catch(e){ console.warn('Commission % lookup failed:', e.message); }
-    if(rmsMoney(commAmt)) resPayload[RMS_UDF.commissionAmt] = rmsMoney(commAmt);
-    if(monthlyRent)   resPayload.deposit           = monthlyRent;
-    if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
+    if(notes) mainPayload.notes = notes;
+    // Commission % is the Company field (companyId) on the RMS screen
+    try{ const compId = await rmsCommissionCompanyId(rmsClient, commPct); if(compId) mainPayload.companyId = compId; else if(commPct) toast('⚠️ Commission % ' + commPct + ' not found in RMS — set it in RMS'); }catch(e){ console.warn('Commission % lookup failed:', e.message); }
+    if(rmsMoney(commAmt)) mainPayload[RMS_UDF.commissionAmt] = rmsMoney(commAmt);
 
-    const reservation = await rmsCall('/reservations', 'POST', resPayload, rmsClient);
-    const resId = reservation.id || reservation.reservationId;
-    // Read the new booking back so field mapping can be checked (shown in the browser console)
-    if(resId){ try{ window.__lastRmsReservation = await rmsCall(`/reservations/${resId}?modelType=full`, 'GET', null, rmsClient); console.log('RMS reservation as saved:', window.__lastRmsReservation); }catch(e){ console.warn('Read-back failed:', e.message); } }
+    const mainRes = await rmsCall('/reservations', 'POST', mainPayload, rmsClient);
+    const resId = mainRes.id || mainRes.reservationId;
+    if(!resId) throw new Error('RMS did not return a reservation number.');
+    setNYData(a.ref_number, { reservation_no: String(resId) });
 
-    // RMS ignores the deposit when creating a booking — set it on the new booking
-    if(resId && monthlyRent){
-      try{ if(!(await rmsUpdate(rmsClient, 'reservations', resId, { deposit: monthlyRent }))) toast('⚠️ Booking created, but the deposit could not be set — please enter it in RMS'); }
+    // RMS ignores the deposit when creating a booking — set it afterwards
+    if(deposit){
+      try{ if(!(await rmsUpdate(rmsClient, 'reservations', resId, { deposit }))) toast('⚠️ Booking created, but the deposit could not be set — please enter it in RMS'); }
       catch(e){ console.warn('Deposit update failed:', e.message); }
     }
 
-    // Save reservation ID back to dashboard
-    if(resId) setNYData(rmsSelectedRef||a.ref_number, { reservation_no: String(resId) });
-
-    // Upload documents to RMS correspondence
-    const allDocs = [
-      { url: a.passport_1_url, name: 'Passport.jpg', note: 'Passport' },
-      { url: a.license_url,    name: 'DriverLicense.jpg', note: 'Driver License' },
-      { url: a.i20_1_url,      name: 'I20.jpg', note: 'I-20' },
-      { url: a.visa_1_url,     name: 'Visa.jpg', note: 'Visa' },
-      { url: a.enrollment_url, name: 'EnrollmentLetter.jpg', note: 'Enrollment Letter' },
-      { url: a.internship_url, name: 'InternshipOffer.jpg', note: 'Internship Offer Letter' },
-    ].filter(d => d.url);
-    // Remove duplicates (same URL uploaded under different field names)
-    const seenUrls = new Set();
-    const docs = allDocs.filter(d => { if(seenUrls.has(d.url)) return false; seenUrls.add(d.url); return true; });
-
-    if(docs.length && resId){
-      toast('Uploading documents to RMS…');
-      for(const doc of docs){
-        try {
-          const scanRes = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
-            body: JSON.stringify({ url: doc.url, mode: 'upload' })
-          });
-          const { base64 } = await scanRes.json();
-          if(!base64) continue;
-          await rmsCall(`/reservations/${resId}/document`, 'POST', {
-            documentName: doc.name,
-            documentContent: base64,
-            note: doc.note
-          }, rmsClient);
-        } catch(e){ console.warn('Doc upload failed:', doc.note, e.message); }
+    // ── Second booking (linked applicant, own unit, no charges) ──
+    let resId2 = null;
+    if(second){
+      try{
+        const g2 = await rmsSearchOrCreateGuest(rmsClient, second.la, idTypeOf(second.la));
+        const p2 = {
+          guestId: g2, categoryId: second.area.categoryId, areaId: second.area.id,
+          arrivalDate: second.stay.moveIn + ' 15:00:00', departureDate: second.stay.moveOut + ' 11:00:00',
+          adults: 1, ...shared,
+        };
+        const r2 = await rmsCall('/reservations', 'POST', p2, rmsClient);
+        resId2 = r2.id || r2.reservationId;
+        if(resId2) setNYData(second.la.ref_number, { reservation_no: String(resId2) });
+      }catch(e){
+        toast(`⚠️ Main booking ${resId} created, but the second booking failed: ${e.message.slice(0,120)}`);
+        console.error('Second booking failed:', e);
       }
-      toast(`✓ Reservation created + ${docs.length} document(s) uploaded to RMS`);
-    } else {
-      toast(`✓ Reservation created in RMS — ID: ${resId}`);
     }
+
+    // Documents: each person's onto their own booking
+    toast('Uploading documents to RMS…');
+    const n1 = await rmsUploadDocs(rmsClient, resId, a);
+    const n2 = resId2 ? await rmsUploadDocs(rmsClient, resId2, second.la) : 0;
+    toast(resId2
+      ? `✓ Bookings ${resId} (main) and ${resId2} created — ${n1+n2} document(s) uploaded`
+      : `✓ Booking ${resId} created — ${n1} document(s) uploaded`);
 
     closeRmsModal();
 
-    // Booking created in RMS -> move the applicant (and linked applicants) to Agreement Issued.
-    // setStatus also fills the agreement date and payment due (T+2) if they're blank.
-    if(resId){
-      const ref = rmsSelectedRef || a.ref_number;
-      const cur = apps.find(x=>x.ref_number===ref);
-      if(cur && cur.status !== 'Agreement Issued') await setStatus(ref, 'Agreement Issued');
-    }
+    // Move the applicant (and linked applicants) to Agreement Issued
+    const cur = apps.find(x=>x.ref_number===a.ref_number);
+    if(cur && cur.status !== 'Agreement Issued') await setStatus(a.ref_number, 'Agreement Issued');
 
   } catch(e){
     errEl.textContent = 'Error: ' + e.message;
-    document.getElementById('rms-submit-btn').textContent = 'Create Reservation';
-    document.getElementById('rms-submit-btn').disabled = false;
+    btn.textContent = 'Create Reservation'; btn.disabled = false;
   }
 }
 
