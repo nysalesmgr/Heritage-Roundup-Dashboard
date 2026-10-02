@@ -2851,7 +2851,7 @@ let rmsSelectedRef = null;
 //   userDefined3 = Commission %, userDefined5 = Payment Terms, userDefined6 = Season
 const RMS_UDF = { commissionPct: 'userDefined3', paymentTerms: 'userDefined5', season: 'userDefined6' };
 // Dashboard Season -> wording used in RMS (anything not listed is sent as it is)
-const RMS_SEASON_TEXT = { 'fall': 'Full Fall Academic Year' };
+const RMS_SEASON_TEXT = { 'fall': 'Full Academic Year' };
 const rmsSeason = v => RMS_SEASON_TEXT[String(v||'').trim().toLowerCase()] || String(v||'').trim();
 const RMS_DEFAULT_RATE = 'Monthly Rental';   // default rate type in every Heritage RMS account
 const rmsLookupCache = {};
