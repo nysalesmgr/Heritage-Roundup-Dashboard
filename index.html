@@ -1115,6 +1115,7 @@ function normalizeSupabaseFormsite(row){
     _source:   source.includes('Domestic') ? 'Domestic' : 'International',
     _property: property,
     _table:    'formsite_submissions',
+    raw_data:  raw,
   };
 
   // Document URLs — differ by form source
@@ -2148,17 +2149,12 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
-  // Auto-scan passport from Supabase Storage if available
+  // Auto-read date of birth / nationality from the passport (only while they're still blank)
   setTimeout(()=>{
-    const raw = a.raw_data || {};
-    const storagePath = raw.stored_passport || raw.stored_license || raw.stored_i20 || '';
-    if(storagePath && !storagePath.startsWith('http')){
-      const bucket = a._source === 'Boston Booking Engine' ? 'boston-applications'
-                   : a._property === 'boston' ? 'boston-formsite'
-                   : a._source === 'NY Summer Booking Engine' ? 'ny-applications'
-                   : 'ny-formsite';
-      autoScanFromStorage(storagePath, a.ref_number, bucket);
-    }
+    const cached = editableCache[a.ref_number] || {};
+    if(cached.dob && cached.nationality) return;
+    const src = passportScanSource(a);
+    if(src) scanPassport(src, a.ref_number);
   }, 800);
 
   // Async load — also fetch history from older entries by same name
@@ -2571,22 +2567,38 @@ function editPanelField(elId, field, el){
   input.onkeydown=e=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){ el.innerHTML=cur?esc(cur):'—'; } };
 }
 // ── DOCUMENT SCANNING (Supabase Storage + Google Vision) ─
-async function autoScanFromStorage(storagePath, ref, bucket='documents'){
+// Where to read the passport from: a stored copy in Supabase Storage, or the uploaded file's link
+function passportScanSource(a){
+  const raw = a.raw_data || {};
+  const path = raw.stored_passport || '';
+  if(path && !path.startsWith('http')){
+    const bucket = a._table === 'applications' ? 'boston-applications'
+                 : a._table === 'ny_summer_booking_engine' ? 'ny-applications'
+                 : a._property === 'boston' ? 'boston-formsite' : 'ny-formsite';
+    return { storage_path: path, bucket };
+  }
+  const url = a.passport_1_url || (path.startsWith('http') ? path : '');
+  return url && /^https?:/i.test(url) ? { url } : null;
+}
+// Kept for older callers
+function autoScanFromStorage(storagePath, ref, bucket='documents'){ return scanPassport({ storage_path: storagePath, bucket }, ref); }
+
+async function scanPassport(source, ref, manual=false){
   try {
-    console.log('autoScanFromStorage called:', storagePath, bucket);
     const res = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
-      body: JSON.stringify({ storage_path: storagePath, bucket })
+      body: JSON.stringify(source)
     });
-    console.log('doc-scan response status:', res.status);
-    if(!res.ok){ console.error('doc-scan failed:', res.status); return; }
+    if(!res.ok){ console.error('doc-scan failed:', res.status); if(manual) toast('Could not scan the document'); return; }
     const { text, error } = await res.json();
-    console.log('text length:', text?.length, 'error:', error);
-    if(error || !text) return;
+    if(error || !text){ if(manual) toast('Could not read the document'); return; }
 
     const extracted = parsePassportMRZ(text);
-    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth) return;
+    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth){
+      if(manual) toast('No passport details found on this document');
+      return;
+    }
 
     const a = apps.find(x=>x.ref_number===ref);
     if(!a) return;
@@ -2600,17 +2612,17 @@ async function autoScanFromStorage(storagePath, ref, bucket='documents'){
       if(!cached.dob){
         updates.dob = extracted.date_of_birth;
         const el = document.getElementById('t-dob');
-        if(el) el.textContent = fmtDate(extracted.date_of_birth);
+        if(el && selectedRef === ref) el.textContent = fmtDate(extracted.date_of_birth);
       }
     }
 
-    // Nationality - fill if blank
+    // Nationality - fill if blank (saved as the country name, e.g. "China")
     if(extracted.nationality){
       const cached = editableCache[ref]||{};
       if(!cached.nationality){
-        updates.nationality = extracted.nationality;
+        updates.nationality = countryFromMRZ(extracted.nationality);
         const el = document.getElementById('t-nationality');
-        if(el) el.textContent = extracted.nationality;
+        if(el && selectedRef === ref) el.textContent = updates.nationality;
       }
     }
 
@@ -2636,39 +2648,58 @@ async function autoScanFromStorage(storagePath, ref, bucket='documents'){
 
     // Show discrepancy warning if any
     if(discrepancies.length) showScanDiscrepancies(discrepancies, ref, extracted);
-    else if(Object.keys(updates).length) toast('✓ Document scanned — details updated');
+    else if(Object.keys(updates).length) toast('✓ Passport read — date of birth / nationality filled in');
+    else if(manual) toast('Passport read — nothing new to fill in');
 
   } catch(e){ console.error('Scan error:', e.message); }
 }
 
+// Read the two machine-readable lines at the bottom of a passport (ICAO 9303, TD3).
+// Tolerates OCR spaces, « for <, and passport types like "PO"/"PD"; dates must pass their check digits.
+function mrzCheck(str){
+  const w=[7,3,1]; let sum=0;
+  for(let i=0;i<str.length;i++){
+    const c=str[i]; const v = c==='<' ? 0 : /\d/.test(c) ? +c : c.charCodeAt(0)-55;
+    sum += v*w[i%3];
+  }
+  return sum % 10;
+}
 function parsePassportMRZ(text){
-  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
   const result = { first_name:'', last_name:'', document_number:'', expiry_date:'', date_of_birth:'', nationality:'' };
-  const mrzLines = lines.filter(l=>/^[A-Z0-9<]{30,}$/.test(l));
-  if(mrzLines.length >= 2){
-    const mrz1 = mrzLines[mrzLines.length-2];
-    const mrz2 = mrzLines[mrzLines.length-1];
-    const nameMatch = mrz1.match(/^P<([A-Z]{3})([A-Z<]+)<<([A-Z<]+)/);
-    if(nameMatch){
-      result.nationality = nameMatch[1];
-      result.last_name   = nameMatch[2].replace(/</g,' ').trim();
-      result.first_name  = nameMatch[3].replace(/</g,' ').trim();
-    }
-    if(mrz2.length >= 44){
-      result.document_number = mrz2.substring(0,9).replace(/</g,'').trim();
-      const dob = mrz2.substring(13,19);
-      const exp = mrz2.substring(21,27);
-      if(/^\d{6}$/.test(dob)){
-        const yr = parseInt(dob.substring(0,2));
-        result.date_of_birth = `${yr < 30 ? 2000+yr : 1900+yr}-${dob.substring(2,4)}-${dob.substring(4,6)}`;
-      }
-      if(/^\d{6}$/.test(exp)){
-        const yr = parseInt(exp.substring(0,2));
-        result.expiry_date = `${2000+yr}-${exp.substring(2,4)}-${exp.substring(4,6)}`;
-      }
-    }
+  const lines = String(text||'').split('\n')
+    .map(l=>l.replace(/\s+/g,'').replace(/«/g,'<').toUpperCase())
+    .filter(l=>/^[A-Z0-9<]{40,46}$/.test(l) && l.includes('<'));
+  if(lines.length < 2) return result;
+  let i = lines.findIndex((l,k)=>/^P[A-Z<][A-Z<]{3}/.test(l) && k < lines.length-1);
+  if(i < 0) i = lines.length-2;
+  const l1 = lines[i].padEnd(44,'<').slice(0,44);
+  const l2 = lines[i+1].padEnd(44,'<').slice(0,44);
+
+  const nm = l1.match(/^P[A-Z<]([A-Z<]{3})([A-Z<]+?)<<([A-Z<]*)/);
+  if(nm){
+    result.last_name  = nm[2].replace(/</g,' ').trim();
+    result.first_name = nm[3].replace(/</g,' ').trim();
+  }
+  const docNo = l2.substring(0,9);
+  if(mrzCheck(docNo) === +l2[9] || !/\d/.test(l2[9])) result.document_number = docNo.replace(/</g,'');
+  const nat = l2.substring(10,13).replace(/</g,'');
+  result.nationality = /^[A-Z]{1,3}$/.test(nat) ? nat : (nm ? nm[1].replace(/</g,'') : '');
+  const dob = l2.substring(13,19), exp = l2.substring(21,27);
+  if(/^\d{6}$/.test(dob) && mrzCheck(dob) === +l2[19]){
+    const yr = +dob.slice(0,2), nowYY = +todayNY().slice(2,4);
+    result.date_of_birth = `${yr > nowYY ? 1900+yr : 2000+yr}-${dob.slice(2,4)}-${dob.slice(4,6)}`;
+  }
+  if(/^\d{6}$/.test(exp) && mrzCheck(exp) === +l2[27]){
+    result.expiry_date = `20${exp.slice(0,2)}-${exp.slice(2,4)}-${exp.slice(4,6)}`;
   }
   return result;
+}
+// Passport country code (3 letters) -> country name, e.g. CHN -> China
+const MRZ_A3_TO_A2 = Object.fromEntries('ABW:AW,AFG:AF,AGO:AO,AIA:AI,ALA:AX,ALB:AL,AND:AD,ARE:AE,ARG:AR,ARM:AM,ASM:AS,ATA:AQ,ATF:TF,ATG:AG,AUS:AU,AUT:AT,AZE:AZ,BDI:BI,BEL:BE,BEN:BJ,BES:BQ,BFA:BF,BGD:BD,BGR:BG,BHR:BH,BHS:BS,BIH:BA,BLM:BL,BLR:BY,BLZ:BZ,BMU:BM,BOL:BO,BRA:BR,BRB:BB,BRN:BN,BTN:BT,BVT:BV,BWA:BW,CAF:CF,CAN:CA,CCK:CC,CHE:CH,CHL:CL,CHN:CN,CIV:CI,CMR:CM,COD:CD,COG:CG,COK:CK,COL:CO,COM:KM,CPV:CV,CRI:CR,CUB:CU,CUW:CW,CXR:CX,CYM:KY,CYP:CY,CZE:CZ,D:DE,DEU:DE,DJI:DJ,DMA:DM,DNK:DK,DOM:DO,DZA:DZ,ECU:EC,EGY:EG,ERI:ER,ESH:EH,ESP:ES,EST:EE,ETH:ET,FIN:FI,FJI:FJ,FLK:FK,FRA:FR,FRO:FO,FSM:FM,GAB:GA,GBD:GB,GBN:GB,GBO:GB,GBP:GB,GBR:GB,GBS:GB,GEO:GE,GGY:GG,GHA:GH,GIB:GI,GIN:GN,GLP:GP,GMB:GM,GNB:GW,GNQ:GQ,GRC:GR,GRD:GD,GRL:GL,GTM:GT,GUF:GF,GUM:GU,GUY:GY,HKG:HK,HMD:HM,HND:HN,HRV:HR,HTI:HT,HUN:HU,IDN:ID,IMN:IM,IND:IN,IOT:IO,IRL:IE,IRN:IR,IRQ:IQ,ISL:IS,ISR:IL,ITA:IT,JAM:JM,JEY:JE,JOR:JO,JPN:JP,KAZ:KZ,KEN:KE,KGZ:KG,KHM:KH,KIR:KI,KNA:KN,KOR:KR,KWT:KW,LAO:LA,LBN:LB,LBR:LR,LBY:LY,LCA:LC,LIE:LI,LKA:LK,LSO:LS,LTU:LT,LUX:LU,LVA:LV,MAC:MO,MAF:MF,MAR:MA,MCO:MC,MDA:MD,MDG:MG,MDV:MV,MEX:MX,MHL:MH,MKD:MK,MLI:ML,MLT:MT,MMR:MM,MNE:ME,MNG:MN,MNP:MP,MOZ:MZ,MRT:MR,MSR:MS,MTQ:MQ,MUS:MU,MWI:MW,MYS:MY,MYT:YT,NAM:NA,NCL:NC,NER:NE,NFK:NF,NGA:NG,NIC:NI,NIU:NU,NLD:NL,NOR:NO,NPL:NP,NRU:NR,NZL:NZ,OMN:OM,PAK:PK,PAN:PA,PCN:PN,PER:PE,PHL:PH,PLW:PW,PNG:PG,POL:PL,PRI:PR,PRK:KP,PRT:PT,PRY:PY,PSE:PS,PYF:PF,QAT:QA,REU:RE,RKS:XK,ROU:RO,RUS:RU,RWA:RW,SAU:SA,SDN:SD,SEN:SN,SGP:SG,SGS:GS,SHN:SH,SJM:SJ,SLB:SB,SLE:SL,SLV:SV,SMR:SM,SOM:SO,SPM:PM,SRB:RS,SSD:SS,STP:ST,SUR:SR,SVK:SK,SVN:SI,SWE:SE,SWZ:SZ,SXM:SX,SYC:SC,SYR:SY,TCA:TC,TCD:TD,TGO:TG,THA:TH,TJK:TJ,TKL:TK,TKM:TM,TLS:TL,TON:TO,TTO:TT,TUN:TN,TUR:TR,TUV:TV,TWN:TW,TZA:TZ,UGA:UG,UKR:UA,UMI:UM,UNK:XK,URY:UY,USA:US,UZB:UZ,VAT:VA,VCT:VC,VEN:VE,VGB:VG,VIR:VI,VNM:VN,VUT:VU,WLF:WF,WSM:WS,YEM:YE,ZAF:ZA,ZMB:ZM,ZWE:ZW'.split(',').map(p=>p.split(':')));
+function countryFromMRZ(code){
+  const a2 = MRZ_A3_TO_A2[String(code||'').toUpperCase()];
+  try{ if(a2) return new Intl.DisplayNames(['en'],{type:'region'}).of(a2) || code; }catch(e){}
+  return code;
 }
 
 function showScanDiscrepancies(discrepancies, ref, extracted){
@@ -2716,15 +2747,10 @@ function acceptScanValue(ref, field, value, btn){
 async function manualScanDocument(){
   const a = apps.find(x=>x.ref_number===selectedRef);
   if(!a) return;
-  const raw = a.raw_data || {};
-  const storagePath = raw.stored_passport || raw.stored_license || raw.stored_i20 || '';
-  if(!storagePath || storagePath.startsWith('http')){ toast('No stored document found'); return; }
-  const bucket = a._source === 'Boston Booking Engine' ? 'boston-applications'
-               : a._property === 'boston' ? 'boston-formsite'
-               : a._source === 'NY Summer Booking Engine' ? 'ny-applications'
-               : 'ny-formsite';
-  toast('Scanning document…');
-  await autoScanFromStorage(storagePath, selectedRef, bucket);
+  const src = passportScanSource(a);
+  if(!src){ toast('No passport document found for this applicant'); return; }
+  toast('Reading passport…');
+  await scanPassport(src, selectedRef, true);
 }
 
 // ── RMS CLOUD INTEGRATION ────────────────────────────────
