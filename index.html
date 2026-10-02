@@ -617,6 +617,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div id="tab-booking" class="ptc">
       <div class="isec"><div class="isec-title">Unit & Dates</div>
         <div class="igrid">
+          <div class="igrid full" style="grid-column:1/-1"><div class="il-l">RMS Res No</div><div class="il-v editable-field" id="t-resno" onclick="editPanelFieldEditable('t-resno','reservation_no',this,'text')" style="cursor:pointer;font-weight:600">—</div></div>
           <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Apartment</div><div class="il-v" id="t-apt">—</div></div>
           <div><div class="il-l">Move-in Date</div><div class="il-v" id="t-movein">—</div></div>
           <div><div class="il-l">Move-out Date</div><div class="il-v" id="t-moveout">—</div></div>
@@ -2110,6 +2111,8 @@ function openPanel(ref){
     document.getElementById('t-moveout').textContent  = d.move_out ? fmtDate(d.move_out) : '—';
     document.getElementById('t-rate').textContent     = d.monthly_rent||'—';
   }
+  // RMS reservation number (set by Create in RMS Cloud; editable)
+  document.getElementById('t-resno').textContent = d.reservation_no || '— (not in RMS yet)';
   // Same for every source: occupants from linked applicants, payment plan from the dashboard
   document.getElementById('t-occ').textContent  = String(occupantCount(a.ref_number));
   document.getElementById('t-plan').textContent = getPaymentPlan(a) || '— (click to set)';
