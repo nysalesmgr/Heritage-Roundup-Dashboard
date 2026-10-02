@@ -2668,13 +2668,15 @@ function parsePassportMRZ(text){
   const result = { first_name:'', last_name:'', document_number:'', expiry_date:'', date_of_birth:'', nationality:'' };
   const lines = String(text||'').split('\n')
     .map(l=>l.replace(/\s+/g,'').replace(/«/g,'<').toUpperCase())
-    .filter(l=>/^[A-Z0-9<]{40,46}$/.test(l) && l.includes('<'));
-  if(lines.length < 2) return result;
-  let i = lines.findIndex((l,k)=>/^P[A-Z<][A-Z<]{3}/.test(l) && k < lines.length-1);
-  if(i < 0) i = lines.length-2;
-  const l1 = lines[i].padEnd(44,'<').slice(0,44);
-  const l2 = lines[i+1].padEnd(44,'<').slice(0,44);
-
+    .filter(l=>/^[A-Z0-9<]{10,46}$/.test(l));
+  // Line 2: doc no(9) check(1) nationality(3) birth date(6) check(1) sex(1) expiry(6) check(1) …
+  const L2 = /^[A-Z0-9<]{9}[0-9<][A-Z<]{3}\d{6}\d[MFX<]\d{6}\d/;
+  const i2 = lines.findIndex(l=>L2.test(l));
+  if(i2 < 0) return result;
+  const l2 = lines[i2].padEnd(44,'<').slice(0,44);
+  // Line 1 is the nearest line above it that starts with "P" (it may be cut short by the scan)
+  let l1 = '';
+  for(let k=i2-1; k>=0; k--){ if(/^P[A-Z<][A-Z<]{3}/.test(lines[k])){ l1 = lines[k]; break; } }
   const nm = l1.match(/^P[A-Z<]([A-Z<]{3})([A-Z<]+?)<<([A-Z<]*)/);
   if(nm){
     result.last_name  = nm[2].replace(/</g,' ').trim();
@@ -2683,7 +2685,8 @@ function parsePassportMRZ(text){
   const docNo = l2.substring(0,9);
   if(mrzCheck(docNo) === +l2[9] || !/\d/.test(l2[9])) result.document_number = docNo.replace(/</g,'');
   const nat = l2.substring(10,13).replace(/</g,'');
-  result.nationality = /^[A-Z]{1,3}$/.test(nat) ? nat : (nm ? nm[1].replace(/</g,'') : '');
+  const issuer = nm ? nm[1].replace(/</g,'') : '';
+  result.nationality = MRZ_A3_TO_A2[nat] ? nat : (MRZ_A3_TO_A2[issuer] ? issuer : '');
   const dob = l2.substring(13,19), exp = l2.substring(21,27);
   if(/^\d{6}$/.test(dob) && mrzCheck(dob) === +l2[19]){
     const yr = +dob.slice(0,2), nowYY = +todayNY().slice(2,4);
