@@ -2712,6 +2712,7 @@ async function rmsCall(path, method='GET', body=null, client=''){
   const headers = {
     'Content-Type': 'application/json',
     'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY, // lets the call pass Supabase's default JWT check
     'x-rms-path': path,
     'x-rms-method': method,
   };
