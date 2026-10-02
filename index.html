@@ -2152,12 +2152,13 @@ function openPanel(ref){
   document.getElementById('panel').classList.add('on');
 
   // Auto-read date of birth / nationality from the passport (only while they're still blank)
-  setTimeout(()=>{
+  {
     const cached = editableCache[a.ref_number] || {};
-    if(cached.dob && cached.nationality && cached.gender) return;
-    const src = passportScanSource(a);
-    if(src) scanPassport(src, a.ref_number);
-  }, 800);
+    if(!(cached.dob && cached.nationality && cached.gender)){
+      const src = passportScanSource(a);
+      if(src) scanPassport(src, a.ref_number); // starts straight away, runs in the background
+    }
+  }
 
   // Async load — also fetch history from older entries by same name
   const fullName = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
