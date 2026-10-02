@@ -3273,7 +3273,7 @@ async function rmsCreateReservation(){
     if(notes)           resPayload.notes           = notes;
     if(bookingSourceId) resPayload.bookingSourceId = bookingSourceId;
     if(paymentTerms)    resPayload[RMS_UDF.paymentTerms]  = paymentTerms;
-    if(rmsPct(commPct)) resPayload[RMS_UDF.commissionPct] = rmsPct(commPct);
+    // Commission % — RMS field still being identified (userDefined3 was the wrong box), so not sent for now
     if(rmsMoney(commAmt)) resPayload[RMS_UDF.commissionAmt] = rmsMoney(commAmt);
     if(monthlyRent)   resPayload.deposit           = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
