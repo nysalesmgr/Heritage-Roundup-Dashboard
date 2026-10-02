@@ -683,9 +683,10 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
         </div>
         <div>
           <div class="il-l">Area (Room) *</div>
-          <select id="rms-area" class="notes-area" style="min-height:0;padding:7px 10px;width:100%">
+          <select id="rms-area" class="notes-area" style="min-height:0;padding:7px 10px;width:100%" onchange="rmsUnitHint()">
             <option value="">Select area…</option>
           </select>
+          <div id="rms-unit-hint" style="font-size:11px;margin-top:4px;color:var(--t3)"></div>
         </div>
       </div>
 
@@ -2749,6 +2750,9 @@ async function openRmsModal(){
     const clients = await rmsCall('/_clients', 'GET');
     const propSel = document.getElementById('rms-property');
     propSel.innerHTML = '<option value="">Select property…</option>';
+    // Clear any category/unit left over from the previous applicant
+    document.getElementById('rms-category').innerHTML = '<option value="">Select category…</option>';
+    document.getElementById('rms-area').innerHTML = '<option value="">Select area…</option>';
     const failed = []; let firstErr = '';
     await Promise.all((Array.isArray(clients) ? clients : []).map(async c => {
       try{
@@ -2789,6 +2793,30 @@ async function openRmsModal(){
       : 'Connected ✓ — fill in details below';
     document.getElementById('rms-form').style.display = 'block';
 
+    // Auto-pick the property whose RMS units include the dashboard unit
+    rmsAreaCache = {};
+    rmsUnitHint('');
+    const unit = rmsDashboardUnit(a);
+    if(unit){
+      const opts = [...propSel.options].filter(o=>o.value);
+      const hits = [];
+      await Promise.all(opts.map(async o=>{
+        const [c, pid] = o.value.split('|');
+        try{ if(rmsMatchArea(await rmsAllAreas(c, pid), unit)) hits.push(o); }catch(e){}
+      }));
+      let pick = hits.length === 1 ? hits[0] : null;
+      if(!pick && hits.length > 1){
+        // Same unit name at several properties: prefer the dashboard's city
+        const city = currentProperty === 'boston' ? 'boston' : '';
+        const byCity = city ? hits.filter(o=>o.textContent.toLowerCase().includes(city)) : [];
+        if(byCity.length === 1) pick = byCity[0];
+      }
+      if(pick){ propSel.value = pick.value; await rmsLoadCategories(); }
+      else rmsUnitHint(hits.length > 1
+        ? `Unit "${unit}" exists at more than one property — choose the property.`
+        : `Dashboard unit "${unit}" wasn't found in RMS — choose property, category and unit.`, '#b45309');
+    }
+
   } catch(e){
     document.getElementById('rms-status').textContent = 'Connection failed: ' + e.message;
   }
@@ -2810,6 +2838,48 @@ function rmsStayDates(a){
   };
 }
 
+// ── Match the dashboard's Unit field to an RMS area ──────────
+function rmsDashboardUnit(a){
+  if(!a) return '';
+  const d = getNYData(a.ref_number);
+  return String(d.unit || (a.apartment||'').split(' | ')[0] || '').trim();
+}
+const rmsNorm = v => String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+// Best single match for `unit` among RMS areas: exact first, then one that ends with it (e.g. "Soho 12B" ↔ "12B")
+function rmsMatchArea(areas, unit){
+  const u = rmsNorm(unit);
+  if(!u) return null;
+  const exact = areas.filter(x => rmsNorm(x.name) === u);
+  if(exact.length === 1) return exact[0];
+  if(exact.length > 1) return null;
+  const partial = areas.filter(x => { const n = rmsNorm(x.name); return n.length >= 2 && (n.endsWith(u) || u.endsWith(n)); });
+  return partial.length === 1 ? partial[0] : null;
+}
+let rmsAreaCache = {}; // "<client>|<propertyId>" -> all areas for that property
+async function rmsAllAreas(client, propId){
+  const k = client + '|' + propId;
+  if(!rmsAreaCache[k]){
+    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET', null, client);
+    rmsAreaCache[k] = Array.isArray(res) ? res : res.result||[];
+  }
+  return rmsAreaCache[k];
+}
+function rmsUnitHint(msg, color){
+  const el = document.getElementById('rms-unit-hint');
+  if(!el) return;
+  if(msg === undefined){ // called when staff change the unit by hand
+    const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
+    const unit = rmsDashboardUnit(a);
+    const sel = document.getElementById('rms-area');
+    const chosen = sel.options[sel.selectedIndex]?.textContent || '';
+    if(unit && sel.value && rmsNorm(chosen) !== rmsNorm(unit) && !rmsNorm(chosen).endsWith(rmsNorm(unit))){
+      el.style.color = '#b45309'; el.textContent = `⚠️ Different from the dashboard unit (${unit}).`;
+    } else { el.textContent = ''; }
+    return;
+  }
+  el.style.color = color || 'var(--t3)'; el.textContent = msg;
+}
+
 // Only list units that RMS says are free for the applicant's whole stay
 async function rmsLoadAreas(){
   const { client, propId } = rmsSelection();
@@ -2826,6 +2896,7 @@ async function rmsLoadAreas(){
   }
   areaSel.innerHTML = '<option value="">Checking availability…</option>';
   errEl.textContent = '';
+  rmsUnitHint('');
   try{
     const res = await rmsCall('/availableAreas', 'POST', {
       propertyId: parseInt(propId),
@@ -2843,6 +2914,20 @@ async function rmsLoadAreas(){
       opt.value = ar.id; opt.textContent = ar.name||ar.id;
       areaSel.appendChild(opt);
     });
+    // Pre-select the dashboard's unit if it's free
+    const unit = rmsDashboardUnit(a);
+    const match = unit ? rmsMatchArea(areas, unit) : null;
+    if(match){
+      areaSel.value = String(match.id);
+      rmsUnitHint(`✓ Matched dashboard unit "${unit}" — available for these dates.`, '#15803d');
+    } else if(unit){
+      const anyMatch = rmsMatchArea(await rmsAllAreas(client, propId).catch(()=>[]), unit);
+      rmsUnitHint(anyMatch
+        ? `⚠️ Dashboard unit "${unit}" is NOT available for these dates.`
+        : `Dashboard unit "${unit}" not found in this category — pick a unit.`, '#b45309');
+    } else {
+      rmsUnitHint('No unit set on the dashboard — pick a unit.');
+    }
   }catch(e){
     console.error('Available areas error:', e);
     areaSel.innerHTML = '<option value="">Could not check availability</option>';
@@ -2863,6 +2948,20 @@ async function rmsLoadCategories(){
       opt.value = c.id; opt.textContent = c.name||c.id;
       catSel.appendChild(opt);
     });
+    // Pre-select the category of the unit set on the dashboard
+    const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
+    const unit = rmsDashboardUnit(a);
+    if(unit){
+      try{
+        const match = rmsMatchArea(await rmsAllAreas(client, propId), unit);
+        if(match && [...catSel.options].some(o=>o.value===String(match.categoryId))){
+          catSel.value = String(match.categoryId);
+          await rmsLoadAreas();
+        } else if(!match){
+          rmsUnitHint(`Dashboard unit "${unit}" wasn't found at this property — choose a category and unit.`, '#b45309');
+        }
+      }catch(e){ console.warn('Unit lookup failed:', e.message); }
+    }
   }catch(e){ console.error('Categories load error:', e); }
 }
 
