@@ -2846,6 +2846,8 @@ async function rmsCall(path, method='GET', body=null, client=''){
 }
 
 let rmsSelectedRef = null;
+// Look at an existing RMS reservation: rmsInspectReservation('p1', 12345)
+async function rmsInspectReservation(client, id){ return rmsCall(`/reservations/${parseInt(id)}?modelType=full`, 'GET', null, client); }
 
 // The property dropdown value is "<rms account key>|<property id>"
 function rmsSelection(){
@@ -3020,7 +3022,7 @@ async function rmsLoadAreas(){
     const res = await rmsCall('/availableAreas', 'POST', {
       propertyId: parseInt(propId),
       categoryIds: [parseInt(catId)],
-      dateFrom: moveIn + ' 14:00:00',
+      dateFrom: moveIn + ' 15:00:00',
       dateTo:   moveOut + ' 11:00:00',
     }, client);
     const areas = (Array.isArray(res) ? res : res.result||[]).filter(x => !x.categoryId || x.categoryId === parseInt(catId));
@@ -3103,11 +3105,9 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
   }
   if(applicant.email && applicant.email.includes('@')) guestPayload.email = applicant.email;
   guestPayload.mobile = (applicant.phone && applicant.phone.length > 3) ? applicant.phone : '0000000000';
-  if(applicant.college)      guestPayload.university   = applicant.college;
   if(d.nationality)          guestPayload.nationality  = d.nationality;
   if(d.dob)                  guestPayload.birthDate    = d.dob;
   if(idType)                 guestPayload.idType       = idType;
-  if(guestStatus)            guestPayload.guestStatus  = guestStatus;
   const pn = applicant.passport_number || d.passport_number;
   if(pn && pn.length > 2)    guestPayload.passportNo   = pn;
   const exp = applicant.passport_expiry || d.passport_expiry;
@@ -3159,16 +3159,15 @@ async function rmsCreateReservation(){
       }
     }
 
-    // Create reservation
-    // Parse booking source and broker name from lead_source
+    // Create reservation — fields follow the NY Sales RMS field list
+    // Booking Source = the dashboard Source (the part before " - " if a broker name follows)
     const leadSource = d.lead_source || a.formsite_source || '';
-    const sourceParts = leadSource.split(' - ');
-    const bookingSource = sourceParts[0].trim();
-    const brokerName = sourceParts.length > 1 ? sourceParts[1].trim() : '';
+    const bookingSource = leadSource.split(' - ')[0].trim();
+    const paymentTerms = getPaymentPlan(a);
 
     // Get commission values
     const commPct = d.incentives || '';
-    const commAmt = calcCommission(a).replace('$','').replace(',','');
+    const commAmt = calcCommission(a).replace(/[$,]/g,'');
 
     // Get monthly rent for deposit
     const monthlyRent = parseFloat((d.monthly_rent||'').replace(/[$,]/g,'')) || 0;
@@ -3177,14 +3176,15 @@ async function rmsCreateReservation(){
       guestId:       guestId,
       categoryId:    parseInt(catId),
       areaId:        parseInt(areaId),
-      arrivalDate:   moveIn + ' 14:00:00',
+      arrivalDate:   moveIn + ' 15:00:00',   // RMS default check-in 3:00 PM
       departureDate: moveOut + ' 11:00:00',
       adults:        occupantCount(a.ref_number),
       status:        'Unconfirmed',
     };
     if(notes)         resPayload.notes            = notes;
     if(d.season)      resPayload.season           = d.season;
-    if(brokerName)    resPayload.brokerName        = brokerName;
+    if(bookingSource) resPayload.bookingSourceName = bookingSource;
+    if(paymentTerms)  resPayload.paymentTerms      = paymentTerms;
     if(commPct)       resPayload.commissionPct     = parseFloat(commPct);
     if(commAmt && commAmt !== '—') resPayload.commissionAmount = parseFloat(commAmt);
     if(monthlyRent)   resPayload.deposit           = monthlyRent;
@@ -3192,6 +3192,8 @@ async function rmsCreateReservation(){
 
     const reservation = await rmsCall('/reservations', 'POST', resPayload, rmsClient);
     const resId = reservation.id || reservation.reservationId;
+    // Read the new booking back so field mapping can be checked (shown in the browser console)
+    if(resId){ try{ window.__lastRmsReservation = await rmsCall(`/reservations/${resId}?modelType=full`, 'GET', null, rmsClient); console.log('RMS reservation as saved:', window.__lastRmsReservation); }catch(e){ console.warn('Read-back failed:', e.message); } }
 
     // Save reservation ID back to dashboard
     if(resId) setNYData(rmsSelectedRef||a.ref_number, { reservation_no: String(resId) });
