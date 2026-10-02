@@ -2846,6 +2846,33 @@ async function rmsCall(path, method='GET', body=null, client=''){
 }
 
 let rmsSelectedRef = null;
+
+// RMS custom reservation fields (confirmed from reservation 1484, Soho):
+//   userDefined3 = Commission %, userDefined5 = Payment Terms, userDefined6 = Season
+const RMS_UDF = { commissionPct: 'userDefined3', paymentTerms: 'userDefined5', season: 'userDefined6' };
+const RMS_DEFAULT_RATE = 'Monthly Rental';   // default rate type in every Heritage RMS account
+const rmsLookupCache = {};
+async function rmsLookup(client, path){
+  const k = client + path;
+  if(!rmsLookupCache[k]){ const r = await rmsCall(path, 'GET', null, client); rmsLookupCache[k] = Array.isArray(r) ? r : (r.result || []); }
+  return rmsLookupCache[k];
+}
+async function rmsRateTypeId(client){
+  const rates = await rmsLookup(client, '/rates');
+  const hit = rates.find(r => rmsNorm(r.name) === rmsNorm(RMS_DEFAULT_RATE));
+  if(!hit) throw new Error(`Rate type "${RMS_DEFAULT_RATE}" not found in this RMS account`);
+  return hit.id;
+}
+// Match the dashboard Source to an RMS booking source (full text first, then the part before " - ")
+async function rmsBookingSourceId(client, source){
+  if(!source) return 0;
+  const list = (await rmsLookup(client, '/bookingSources')).filter(b => !b.inactive);
+  const tries = [source, source.split(' - ')[0]].map(rmsNorm);
+  for(const t of tries){ const hit = list.find(b => rmsNorm(b.name) === t); if(hit) return hit.id; }
+  return 0;
+}
+// RMS shows commission as "10.00%"
+const rmsPct = v => { const n = parseFloat(String(v||'').replace('%','')); return isNaN(n) ? '' : n.toFixed(2) + '%'; };
 // Look at an existing RMS reservation: rmsInspectReservation('p1', 12345)
 async function rmsInspectReservation(client, id){ return rmsCall(`/reservations/${parseInt(id)}?modelType=full`, 'GET', null, client); }
 
@@ -3162,8 +3189,12 @@ async function rmsCreateReservation(){
     // Create reservation — fields follow the NY Sales RMS field list
     // Booking Source = the dashboard Source (the part before " - " if a broker name follows)
     const leadSource = d.lead_source || a.formsite_source || '';
-    const bookingSource = leadSource.split(' - ')[0].trim();
     const paymentTerms = getPaymentPlan(a);
+    const [rateTypeId, bookingSourceId] = await Promise.all([
+      rmsRateTypeId(rmsClient),
+      rmsBookingSourceId(rmsClient, leadSource.trim()).catch(()=>0),
+    ]);
+    if(!d.season) throw new Error('Season is required by RMS — set the Season on the dashboard first.');
 
     // Get commission values
     const commPct = d.incentives || '';
@@ -3180,13 +3211,13 @@ async function rmsCreateReservation(){
       departureDate: moveOut + ' 11:00:00',
       adults:        occupantCount(a.ref_number),
       status:        'Unconfirmed',
+      rateTypeId:    rateTypeId,
+      [RMS_UDF.season]: d.season,
     };
-    if(notes)         resPayload.notes            = notes;
-    if(d.season)      resPayload.season           = d.season;
-    if(bookingSource) resPayload.bookingSourceName = bookingSource;
-    if(paymentTerms)  resPayload.paymentTerms      = paymentTerms;
-    if(commPct)       resPayload.commissionPct     = parseFloat(commPct);
-    if(commAmt && commAmt !== '—') resPayload.commissionAmount = parseFloat(commAmt);
+    if(notes)           resPayload.notes           = notes;
+    if(bookingSourceId) resPayload.bookingSourceId = bookingSourceId;
+    if(paymentTerms)    resPayload[RMS_UDF.paymentTerms]  = paymentTerms;
+    if(rmsPct(commPct)) resPayload[RMS_UDF.commissionPct] = rmsPct(commPct);
     if(monthlyRent)   resPayload.deposit           = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
 
