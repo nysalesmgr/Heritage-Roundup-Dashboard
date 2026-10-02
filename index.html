@@ -2749,7 +2749,7 @@ async function openRmsModal(){
     const clients = await rmsCall('/_clients', 'GET');
     const propSel = document.getElementById('rms-property');
     propSel.innerHTML = '<option value="">Select property…</option>';
-    const failed = [];
+    const failed = []; let firstErr = '';
     await Promise.all((Array.isArray(clients) ? clients : []).map(async c => {
       try{
         const properties = await rmsCall('/properties?modelType=basic', 'GET', null, c.key);
@@ -2758,9 +2758,9 @@ async function openRmsModal(){
           opt.value = c.key + '|' + p.id; opt.textContent = p.name || c.name;
           propSel.appendChild(opt);
         });
-      }catch(e){ console.error('RMS account failed:', c.name, e.message); failed.push(c.name); }
+      }catch(e){ console.error('RMS account failed:', c.name, e.message); failed.push(c.name); if(!firstErr) firstErr = e.message; }
     }));
-    if(propSel.options.length <= 1) throw new Error('could not load any RMS property' + (failed.length ? ' ('+failed.join(', ')+')' : ''));
+    if(propSel.options.length <= 1) throw new Error('could not load any RMS property' + (failed.length ? ' ('+failed.join(', ')+')' : '') + (firstErr ? ' — first error: ' + firstErr : ''));
 
     // Show applicant summary
     const d = getNYData(a.ref_number);
