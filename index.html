@@ -609,7 +609,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelFieldEditable('t-dob','dob',this,'date')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelFieldEditable('t-nationality','nationality',this,'text')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Gender</div><div class="il-v editable-field" id="t-gender" onclick="editGender(this)" style="cursor:pointer">—</div></div>
-          <div><div class="il-l">Document Type</div><div class="il-v editable-field" id="t-idtype" onclick="editIdType(this)" style="cursor:pointer">—</div></div>
+          <div><div class="il-l">ID Type</div><div class="il-v editable-field" id="t-idtype" onclick="editIdType(this)" style="cursor:pointer">—</div></div>
           <div style="grid-column:1/-1;margin-top:4px"><button onclick="manualScanDocument()" style="font-size:11px;background:var(--navy);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">🔍 Scan Document</button></div>
         </div>
       </div>
@@ -1702,7 +1702,7 @@ function getNYData(ref){ return editableCache[ref] || {}; }
 const FIELD_LABELS = {
   unit:'Unit', move_in:'Move-in', move_out:'Move-out', monthly_rent:'Monthly Rent',
   incentives:'Commission %', vmu:'VMU Date', ipt:'IPT Date', student_status:'Student Status',
-  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan', gender:'Gender', id_type:'Document Type',
+  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan', gender:'Gender', id_type:'ID Type',
   reservation_no:'Reservation #', agr_date:'Agreement Date', payment_due:'Payment Due', remarks:'Remarks'
 };
 
@@ -2521,7 +2521,7 @@ function editIdType(el){
   sel.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
   sel.onclick = e => e.stopPropagation();
   el.innerHTML=''; el.appendChild(sel); sel.focus();
-  sel.onchange = () => { setNYData(selectedRef, { id_type: sel.value }); el.textContent = sel.value || '—'; toast('Document type updated ✓'); };
+  sel.onchange = () => { setNYData(selectedRef, { id_type: sel.value }); el.textContent = sel.value || '—'; toast('ID type updated ✓'); };
   sel.onblur = () => { el.textContent = getNYData(selectedRef).id_type || '—'; };
 }
 // Work out what kind of document was scanned from its text
