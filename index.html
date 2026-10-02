@@ -609,6 +609,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelFieldEditable('t-dob','dob',this,'date')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelFieldEditable('t-nationality','nationality',this,'text')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Gender</div><div class="il-v editable-field" id="t-gender" onclick="editGender(this)" style="cursor:pointer">—</div></div>
+          <div><div class="il-l">Document Type</div><div class="il-v editable-field" id="t-idtype" onclick="editIdType(this)" style="cursor:pointer">—</div></div>
           <div style="grid-column:1/-1;margin-top:4px"><button onclick="manualScanDocument()" style="font-size:11px;background:var(--navy);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-family:Inter,sans-serif">🔍 Scan Document</button></div>
         </div>
       </div>
@@ -1701,7 +1702,7 @@ function getNYData(ref){ return editableCache[ref] || {}; }
 const FIELD_LABELS = {
   unit:'Unit', move_in:'Move-in', move_out:'Move-out', monthly_rent:'Monthly Rent',
   incentives:'Commission %', vmu:'VMU Date', ipt:'IPT Date', student_status:'Student Status',
-  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan', gender:'Gender',
+  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan', gender:'Gender', id_type:'Document Type',
   reservation_no:'Reservation #', agr_date:'Agreement Date', payment_due:'Payment Due', remarks:'Remarks'
 };
 
@@ -1709,7 +1710,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','payment_plan','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','updated_at'];
   const raw = { ...editableCache[ref], ref_number: ref, property: currentProperty, updated_at: new Date().toISOString() };
   const payload = {};
   allowed.forEach(k => { if(raw[k] !== undefined) payload[k] = raw[k]; });
@@ -2091,6 +2092,7 @@ function openPanel(ref){
     document.getElementById('t-dob').textContent = getNYData(a.ref_number).dob ? fmtDate(getNYData(a.ref_number).dob) : '—';
     document.getElementById('t-nationality').textContent = getNYData(a.ref_number).nationality || '—';
     document.getElementById('t-gender').textContent = getNYData(a.ref_number).gender || '—';
+    document.getElementById('t-idtype').textContent = getNYData(a.ref_number).id_type || '—';
   }
 
   
@@ -2154,7 +2156,7 @@ function openPanel(ref){
   // Auto-read date of birth / nationality from the passport (only while they're still blank)
   {
     const cached = editableCache[a.ref_number] || {};
-    if(!(cached.dob && cached.nationality && cached.gender)){
+    if(!(cached.dob && cached.nationality && cached.gender && cached.id_type)){
       const src = passportScanSource(a);
       if(src) scanPassport(src, a.ref_number); // starts straight away, runs in the background
     }
@@ -2510,6 +2512,28 @@ function editGender(el){
   sel.onchange = () => { setNYData(selectedRef, { gender: sel.value }); el.textContent = sel.value || '—'; toast('Gender updated ✓'); };
   sel.onblur = () => { el.textContent = getNYData(selectedRef).gender || '—'; };
 }
+const ID_TYPES = ['Passport','Driver Licence','ID Card'];
+function editIdType(el){
+  if(!selectedRef || el.querySelector('select')) return;
+  const cur = getNYData(selectedRef).id_type || '';
+  const sel = document.createElement('select');
+  sel.innerHTML = '<option value="">—</option>' + ID_TYPES.map(t=>`<option${t===cur?' selected':''}>${t}</option>`).join('');
+  sel.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
+  sel.onclick = e => e.stopPropagation();
+  el.innerHTML=''; el.appendChild(sel); sel.focus();
+  sel.onchange = () => { setNYData(selectedRef, { id_type: sel.value }); el.textContent = sel.value || '—'; toast('Document type updated ✓'); };
+  sel.onblur = () => { el.textContent = getNYData(selectedRef).id_type || '—'; };
+}
+// Work out what kind of document was scanned from its text
+function detectDocType(text, mrz){
+  const t = String(text||'').toUpperCase();
+  const flat = t.replace(/\s+/g,'');
+  if((mrz && (mrz.date_of_birth || mrz.document_number) && /\nP[A-Z<]/.test('\n'+t.split('\n').map(l=>l.replace(/\s+/g,'')).join('\n'))) || /PASSPORT|PASSEPORT|PASAPORTE|REISEPASS/.test(t)) return 'Passport';
+  if(/DRIVER'?S?\s*LICEN[CS]E|DRIVING\s*LICEN[CS]E|PERMIS\s*DE\s*CONDUIRE|LICENCIA\s*DE\s*CONDUCIR/.test(t)) return 'Driver Licence';
+  if(/IDENTIFICATION\s*CARD|IDENTITY\s*CARD|\bID\s*CARD\b|NON-?DRIVER/.test(t) || /(^|\n)I[A-Z<][A-Z<]{3}[A-Z0-9<]{25}/.test(flat)) return 'ID Card';
+  return '';
+}
+
 // Driver licence / ID card: "SEX F", "Sex: M", "15 SEX M" …
 function genderFromID(text){
   const m = String(text||'').toUpperCase().match(/\bSEX\s*[:.]?\s*(?:\d{1,2}\s*)?([MF])\b/);
@@ -2617,7 +2641,8 @@ async function scanPassport(source, ref, manual=false){
 
     const extracted = parsePassportMRZ(text);
     if(!extracted.gender) extracted.gender = genderFromID(text);
-    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth && !extracted.gender){
+    const docType = detectDocType(text, extracted);
+    if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth && !extracted.gender && !docType){
       if(manual) toast('No passport details found on this document');
       return;
     }
@@ -2645,6 +2670,16 @@ async function scanPassport(source, ref, manual=false){
         updates.nationality = countryFromMRZ(extracted.nationality);
         const el = document.getElementById('t-nationality');
         if(el && selectedRef === ref) el.textContent = updates.nationality;
+      }
+    }
+
+    // Document type - fill if blank
+    if(docType){
+      const cached = editableCache[ref]||{};
+      if(!cached.id_type){
+        updates.id_type = docType;
+        const el = document.getElementById('t-idtype');
+        if(el && selectedRef === ref) el.textContent = docType;
       }
     }
 
@@ -3104,7 +3139,7 @@ async function rmsCreateReservation(){
   try {
 
     // Determine ID type from uploaded documents
-    const idType = a.passport_1_url ? 'Passport' : a.license_url ? 'Driver Licence' : '';
+    const idType = getNYData(a.ref_number).id_type || (a.passport_1_url ? 'Passport' : a.license_url ? 'Driver Licence' : '');
 
     // Determine guest status from uploaded documents
     const guestStatus = a.i20_1_url ? 'Student' : a.internship_url ? 'Intern' : '';
@@ -3118,7 +3153,7 @@ async function rmsCreateReservation(){
     if(linkedRefs.length){
       const la = apps.find(x=>x.ref_number===linkedRefs[0]);
       if(la){
-        const laIdType = la.passport_1_url ? 'Passport' : la.license_url ? 'Driver Licence' : '';
+        const laIdType = getNYData(la.ref_number).id_type || (la.passport_1_url ? 'Passport' : la.license_url ? 'Driver Licence' : '');
         const laGuestStatus = la.i20_1_url ? 'Student' : la.internship_url ? 'Intern' : '';
         secondaryGuestId = await rmsSearchOrCreateGuest(rmsClient, la, laIdType, laGuestStatus);
       }
