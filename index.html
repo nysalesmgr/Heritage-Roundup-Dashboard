@@ -1755,7 +1755,7 @@ function editCell(td, ref, field, type){
 
   if(type==='season'){
     input = document.createElement('select');
-    const opts = currentProperty==='boston' ? ['—','9 months','12 months','Spring'] : ['—','Spring','Summer','Fall','Sub-License'];
+    const opts = currentProperty==='boston' ? ['—','9 months','12 months','Spring'] : ['—','Spring','Summer','Fall','NYSE','Sub-License'];
     opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; input.appendChild(op); });
   } else if(type==='student'){
     input = document.createElement('select');
@@ -1779,7 +1779,8 @@ function editCell(td, ref, field, type){
     if(field==='season'){
       const v = (val||'').toLowerCase();
       let seasonStyle = '';
-      if(v.includes('spring')) seasonStyle = 'background:#DCFCE7;color:#166534;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      if(v.includes('nyse')) seasonStyle = 'background:#DBEAFE;color:#1E40AF;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      else if(v.includes('spring')) seasonStyle = 'background:#DCFCE7;color:#166534;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
@@ -1958,7 +1959,8 @@ function nyCell(ref, field, type, fallback){
   let seasonStyle = '';
   if(field==='season' && val){
     const v = val.toLowerCase();
-    if(v.includes('spring')) seasonStyle = 'background:#DCFCE7;color:#166534;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+    if(v.includes('nyse')) seasonStyle = 'background:#DBEAFE;color:#1E40AF;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
+      else if(v.includes('spring')) seasonStyle = 'background:#DCFCE7;color:#166534;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
     else if(v.includes('summer')) seasonStyle = 'background:#FFF176;color:#7B6000;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
     else if(v.includes('sub')) seasonStyle = 'background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
     else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
