@@ -2850,6 +2850,9 @@ let rmsSelectedRef = null;
 // RMS custom reservation fields (confirmed from reservation 1484, Soho):
 //   userDefined3 = Commission %, userDefined5 = Payment Terms, userDefined6 = Season
 const RMS_UDF = { commissionPct: 'userDefined3', paymentTerms: 'userDefined5', season: 'userDefined6' };
+// Dashboard Season -> wording used in RMS (anything not listed is sent as it is)
+const RMS_SEASON_TEXT = { 'fall': 'Full Fall Academic Year' };
+const rmsSeason = v => RMS_SEASON_TEXT[String(v||'').trim().toLowerCase()] || String(v||'').trim();
 const RMS_DEFAULT_RATE = 'Monthly Rental';   // default rate type in every Heritage RMS account
 const rmsLookupCache = {};
 async function rmsLookup(client, path){
@@ -3212,7 +3215,7 @@ async function rmsCreateReservation(){
       adults:        occupantCount(a.ref_number),
       status:        'Unconfirmed',
       rateTypeId:    rateTypeId,
-      [RMS_UDF.season]: d.season,
+      [RMS_UDF.season]: rmsSeason(d.season),
     };
     if(notes)           resPayload.notes           = notes;
     if(bookingSourceId) resPayload.bookingSourceId = bookingSourceId;
