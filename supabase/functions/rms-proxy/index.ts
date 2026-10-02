@@ -40,18 +40,35 @@ const ALLOW: Array<[string, RegExp]> = [
   ["POST", /^\/availableAreas$/],
   ["POST", /^\/guests\/search\?modelType=basic$/],
   ["POST", /^\/guests$/],
-  ["GET", /^\/guests\/\d+(\?modelType=(basic|full))?$/],
-  // Updates to an existing guest / reservation (deposit, guest ID details)
+  ["GET", /^\/guests\/\d+\?modelType=full$/],
   ["PATCH", /^\/guests\/\d+$/],
-  ["PUT", /^\/guests(\/\d+)?$/],
-  ["PATCH", /^\/reservations\/\d+$/],
-  ["PUT", /^\/reservations\/\d+$/],
   ["POST", /^\/reservations$/],
-  // Read-only lookups (used to match RMS's mandatory reservation fields)
-  ["GET", /^\/reservations\/\d+(\/[A-Za-z]+)?(\?[A-Za-z0-9=&_.-]*)?$/],
-  ["GET", /^\/(mandatoryFields|rateTypes|rates|bookingSources|userDefinedFields|reservationUserDefinedFields|seasons|nationalities|countries|idTypes|identificationTypes|guestStatuses|genders|companies|businessSegments|mealPlans|occupants|occupantTypes|marketSegments|subMarketSegments|billingCategories|activities)(\/[A-Za-z0-9]+)*(\?[A-Za-z0-9=&_.-]*)?$/],
+  ["GET", /^\/reservations\/\d+\?modelType=full$/],
+  ["PATCH", /^\/reservations\/\d+$/],
   ["POST", /^\/reservations\/\d+\/document$/],
+  // Read-only lookup lists used to match names to RMS ids
+  ["GET", /^\/(rates|bookingSources|countries|idTypes|companies|mandatoryFields)$/],
 ];
+
+// Fields the dashboard may write, per call. Anything else in the body is dropped.
+const GUEST_FIELDS = ["guestGiven","guestSurname","email","mobile","gender","birthday","passportId","passportExpiry","userDefined15","nationalityId","idTypeId"];
+const BODY_FIELDS: Array<[string, RegExp, string[]]> = [
+  ["POST",  /^\/guests$/, GUEST_FIELDS],
+  ["PATCH", /^\/guests\/\d+$/, GUEST_FIELDS.filter(f => !["guestGiven","guestSurname","email"].includes(f))],
+  ["POST",  /^\/reservations$/, ["guestId","categoryId","areaId","arrivalDate","departureDate","adults","status","rateTypeId","bookingSourceId","companyId","notes","userDefined2","userDefined5","userDefined6"]],
+  ["PATCH", /^\/reservations\/\d+$/, ["deposit"]],
+  ["POST",  /^\/guests\/search\?modelType=basic$/, ["email","given","surname"]],
+  ["POST",  /^\/availableAreas$/, ["propertyId","categoryIds","dateFrom","dateTo"]],
+  ["POST",  /^\/reservations\/\d+\/document$/, ["documentName","documentContent","note"]],
+];
+function cleanBody(method: string, path: string, raw: string): string | undefined {
+  const rule = BODY_FIELDS.find(([m, re]) => m === method && re.test(path));
+  if (!rule) return undefined;
+  let obj: Record<string, unknown> = {};
+  try { obj = JSON.parse(raw || "{}"); } catch { return undefined; }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return undefined;
+  return JSON.stringify(Object.fromEntries(Object.entries(obj).filter(([k]) => rule[2].includes(k))));
+}
 
 const cors = (origin: string) => ({
   "Access-Control-Allow-Origin": origin === ALLOWED_ORIGIN ? origin : "null",
@@ -80,6 +97,7 @@ async function getToken(c: Client, force = false): Promise<string> {
   if (!res.ok) throw new Error(`RMS login failed for ${c.name} (${res.status})`);
   const data = await res.json();
   const token = data.token ?? data.authToken;
+  if (!token) throw new Error(`RMS login failed for ${c.name} (no token)`);
   const exp = data.expiryDate ? Date.parse(data.expiryDate) : NaN;
   tokens.set(c.key, { token, expires: (isNaN(exp) ? Date.now() + 60 * 60 * 1000 : exp) - 5 * 60 * 1000 });
   return token;
@@ -109,7 +127,8 @@ Deno.serve(async (req) => {
   const client = clientByKey(req.headers.get("x-rms-client") ?? "");
   if (!client) return json(400, { error: "unknown RMS account" });
 
-  const body = method === "GET" ? undefined : await req.text();
+  const body = method === "GET" ? undefined : cleanBody(method, path, await req.text());
+  if (method !== "GET" && body === undefined) return json(400, { error: "invalid request body" });
   const base = (client.baseUrl || BASE).replace(/\/+$/, "");
   try {
     const send = async (t: string) =>
