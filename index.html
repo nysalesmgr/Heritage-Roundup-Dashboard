@@ -2891,6 +2891,13 @@ async function rmsCountryId(client, nationality){
   if(!hit) hit = list.find(c => rmsNorm(c.name).startsWith(n) || n.startsWith(rmsNorm(c.name)));
   return hit ? hit.id : 0;
 }
+async function rmsCommissionCompanyId(client, pct){
+  const want = formatPercent(pct); if(!want || !/%$/.test(want)) return 0;
+  const list = await rmsLookup(client, '/companies');
+  const n = rmsNorm(want);
+  const hit = list.find(c => rmsNorm(c.name) === n) || list.find(c => rmsNorm(c.name).replace(/00$/,'') === n);
+  return hit ? hit.id : 0;
+}
 async function rmsIdTypeId(client, idType){
   const n = rmsNorm(idType); if(!n) return 0;
   const list = await rmsLookup(client, '/idTypes');
@@ -2905,7 +2912,11 @@ async function rmsGuestDetails(client, applicant, idType){
   const pn = applicant.passport_number || d.passport_number;
   if(pn && String(pn).length > 2) out.passportId = String(pn).trim();
   const exp = applicant.passport_expiry || d.passport_expiry;
-  if(exp && rmsISODate(exp)) out.passportExpiry = rmsISODate(exp) + ' 00:00:00';
+  if(exp && rmsISODate(exp)){
+    out.userDefined15 = rmsISODate(exp) + ' 23:59:00';   // "ID Expiry Date" on the RMS guest screen (confirmed on guest 1440)
+    out.passportExpiry = rmsISODate(exp) + ' 00:00:00';
+  }
+  if(d.gender === 'Male' || d.gender === 'Female') out.gender = d.gender[0];   // RMS stores M / F
   const [natId, idTypeId] = await Promise.all([
     rmsCountryId(client, d.nationality).catch(()=>0),
     rmsIdTypeId(client, idType).catch(()=>0),
@@ -3273,7 +3284,8 @@ async function rmsCreateReservation(){
     if(notes)           resPayload.notes           = notes;
     if(bookingSourceId) resPayload.bookingSourceId = bookingSourceId;
     if(paymentTerms)    resPayload[RMS_UDF.paymentTerms]  = paymentTerms;
-    // Commission % — RMS field still being identified (userDefined3 was the wrong box), so not sent for now
+    // Commission % — on the RMS screen this is the Company field (companyId), confirmed on booking 1936
+    try{ const compId = await rmsCommissionCompanyId(rmsClient, commPct); if(compId) resPayload.companyId = compId; else if(commPct) toast('⚠️ Commission % ' + commPct + ' not found in RMS — set it in RMS'); }catch(e){ console.warn('Commission % lookup failed:', e.message); }
     if(rmsMoney(commAmt)) resPayload[RMS_UDF.commissionAmt] = rmsMoney(commAmt);
     if(monthlyRent)   resPayload.deposit           = monthlyRent;
     if(secondaryGuestId) resPayload.secondaryGuestId = secondaryGuestId;
