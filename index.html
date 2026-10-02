@@ -2879,6 +2879,53 @@ async function rmsBookingSourceId(client, source){
   for(const t of tries){ const hit = list.find(b => rmsNorm(b.name) === t); if(hit) return hit.id; }
   return 0;
 }
+// Guest lookups: RMS stores nationality and ID type as IDs from its own lists
+async function rmsCountryId(client, nationality){
+  const n = rmsNorm(nationality); if(!n) return 0;
+  const list = await rmsLookup(client, '/countries');
+  let hit = list.find(c => rmsNorm(c.name) === n);
+  if(!hit){ // e.g. dashboard "South Korea" vs RMS "Korea, Republic of": match on the 3-letter code
+    const a3 = Object.keys(MRZ_A3_TO_A2).find(k => rmsNorm(countryFromMRZ(k)) === n) || (nationality.length===3 ? nationality.toUpperCase() : '');
+    if(a3) hit = list.find(c => c.ISOCountryCode === a3);
+  }
+  if(!hit) hit = list.find(c => rmsNorm(c.name).startsWith(n) || n.startsWith(rmsNorm(c.name)));
+  return hit ? hit.id : 0;
+}
+async function rmsIdTypeId(client, idType){
+  const n = rmsNorm(idType); if(!n) return 0;
+  const list = await rmsLookup(client, '/idTypes');
+  const hit = list.find(t => rmsNorm(t.description) === n || rmsNorm(t.shortDescription) === n);
+  return hit ? hit.id : 0;
+}
+// Guest ID details in RMS's own field names
+async function rmsGuestDetails(client, applicant, idType){
+  const d = getNYData(applicant.ref_number);
+  const out = {};
+  if(d.dob) out.birthday = rmsISODate(d.dob) + ' 00:00:00';
+  const pn = applicant.passport_number || d.passport_number;
+  if(pn && String(pn).length > 2) out.passportId = String(pn).trim();
+  const exp = applicant.passport_expiry || d.passport_expiry;
+  if(exp && rmsISODate(exp)) out.passportExpiry = rmsISODate(exp) + ' 00:00:00';
+  const [natId, idTypeId] = await Promise.all([
+    rmsCountryId(client, d.nationality).catch(()=>0),
+    rmsIdTypeId(client, idType).catch(()=>0),
+  ]);
+  if(natId)    out.nationalityId = natId;
+  if(idTypeId) out.idTypeId = idTypeId;
+  return out;
+}
+// Update an existing record: try a partial update first, then a full update with the changes merged in
+async function rmsUpdate(client, kind, id, changes){
+  if(!Object.keys(changes).length) return true;
+  try{ await rmsCall(`/${kind}/${id}`, 'PATCH', changes, client); return true; }catch(e){ console.warn(`PATCH /${kind}/${id} failed:`, e.message); }
+  const full = await rmsCall(`/${kind}/${id}?modelType=full`, 'GET', null, client);
+  const obj = { ...(Array.isArray(full) ? full[0] : full), ...changes };
+  try{ await rmsCall(kind === 'guests' ? '/guests' : `/${kind}/${id}`, 'PUT', obj, client); return true; }
+  catch(e){ console.warn(`PUT ${kind} ${id} failed:`, e.message); }
+  if(kind === 'guests'){ try{ await rmsCall(`/guests/${id}`, 'PUT', obj, client); return true; }catch(e){ console.warn('PUT /guests/id failed:', e.message); } }
+  return false;
+}
+
 // RMS Commission % is a pick-list ("8%", "10%" …) — "8.00%" doesn't match an option and shows blank
 const rmsPct = v => { const n = parseFloat(String(v||'').replace('%','')); return isNaN(n) ? '' : String(n) + '%'; };
 // Look at an existing RMS reservation: rmsInspectReservation('p1', 12345)
@@ -3126,7 +3173,14 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
   const searchData = await rmsCall('/guests/search?modelType=basic', 'POST',
     { email: applicant.email, given: applicant.first_name, surname: applicant.last_name }, client);
   const results = Array.isArray(searchData) ? searchData : searchData.result||[];
-  if(results.length > 0) return results[0].id;
+  const details = await rmsGuestDetails(client, applicant, idType);
+  if(results.length > 0){
+    // Existing guest: fill in any ID details RMS doesn't have yet
+    const id = results[0].id;
+    try{ if(!(await rmsUpdate(client, 'guests', id, details))) toast('⚠️ Guest found in RMS but ID details could not be updated'); }
+    catch(e){ console.warn('Guest update failed:', e.message); }
+    return id;
+  }
 
   // Create new guest
   const d = getNYData(applicant.ref_number);
@@ -3140,13 +3194,7 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
   }
   if(applicant.email && applicant.email.includes('@')) guestPayload.email = applicant.email;
   guestPayload.mobile = (applicant.phone && applicant.phone.length > 3) ? applicant.phone : '0000000000';
-  if(d.nationality)          guestPayload.nationality  = d.nationality;
-  if(d.dob)                  guestPayload.birthDate    = d.dob;
-  if(idType)                 guestPayload.idType       = idType;
-  const pn = applicant.passport_number || d.passport_number;
-  if(pn && pn.length > 2)    guestPayload.passportNo   = pn;
-  const exp = applicant.passport_expiry || d.passport_expiry;
-  if(exp)                    guestPayload.idExpiryDate = exp;
+  Object.assign(guestPayload, details);  // birthday, passportId, passportExpiry, nationalityId, idTypeId
   const guest = await rmsCall('/guests', 'POST', guestPayload, client);
   return guest.id || guest.guestId;
 }
@@ -3234,6 +3282,12 @@ async function rmsCreateReservation(){
     const resId = reservation.id || reservation.reservationId;
     // Read the new booking back so field mapping can be checked (shown in the browser console)
     if(resId){ try{ window.__lastRmsReservation = await rmsCall(`/reservations/${resId}?modelType=full`, 'GET', null, rmsClient); console.log('RMS reservation as saved:', window.__lastRmsReservation); }catch(e){ console.warn('Read-back failed:', e.message); } }
+
+    // RMS ignores the deposit when creating a booking — set it on the new booking
+    if(resId && monthlyRent){
+      try{ if(!(await rmsUpdate(rmsClient, 'reservations', resId, { deposit: monthlyRent }))) toast('⚠️ Booking created, but the deposit could not be set — please enter it in RMS'); }
+      catch(e){ console.warn('Deposit update failed:', e.message); }
+    }
 
     // Save reservation ID back to dashboard
     if(resId) setNYData(rmsSelectedRef||a.ref_number, { reservation_no: String(resId) });

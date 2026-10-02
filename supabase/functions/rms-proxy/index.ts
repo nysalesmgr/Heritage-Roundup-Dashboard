@@ -41,6 +41,11 @@ const ALLOW: Array<[string, RegExp]> = [
   ["POST", /^\/guests\/search\?modelType=basic$/],
   ["POST", /^\/guests$/],
   ["GET", /^\/guests\/\d+(\?modelType=(basic|full))?$/],
+  // Updates to an existing guest / reservation (deposit, guest ID details)
+  ["PATCH", /^\/guests\/\d+$/],
+  ["PUT", /^\/guests(\/\d+)?$/],
+  ["PATCH", /^\/reservations\/\d+$/],
+  ["PUT", /^\/reservations\/\d+$/],
   ["POST", /^\/reservations$/],
   // Read-only lookups (used to match RMS's mandatory reservation fields)
   ["GET", /^\/reservations\/\d+(\/[A-Za-z]+)?(\?[A-Za-z0-9=&_.-]*)?$/],
@@ -104,7 +109,7 @@ Deno.serve(async (req) => {
   const client = clientByKey(req.headers.get("x-rms-client") ?? "");
   if (!client) return json(400, { error: "unknown RMS account" });
 
-  const body = method === "POST" ? await req.text() : undefined;
+  const body = method === "GET" ? undefined : await req.text();
   const base = (client.baseUrl || BASE).replace(/\/+$/, "");
   try {
     const send = async (t: string) =>
