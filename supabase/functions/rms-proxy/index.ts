@@ -44,7 +44,7 @@ const ALLOW: Array<[string, RegExp]> = [
   ["POST", /^\/reservations$/],
   // Read-only lookups (used to match RMS's mandatory reservation fields)
   ["GET", /^\/reservations\/\d+(\/[A-Za-z]+)?(\?[A-Za-z0-9=&_.-]*)?$/],
-  ["GET", /^\/(mandatoryFields|rateTypes|rates|bookingSources|userDefinedFields|reservationUserDefinedFields|seasons)(\/[A-Za-z0-9]+)*(\?[A-Za-z0-9=&_.-]*)?$/],
+  ["GET", /^\/(mandatoryFields|rateTypes|rates|bookingSources|userDefinedFields|reservationUserDefinedFields|seasons|nationalities|countries|idTypes|identificationTypes|guestStatuses|genders)(\/[A-Za-z0-9]+)*(\?[A-Za-z0-9=&_.-]*)?$/],
   ["POST", /^\/reservations\/\d+\/document$/],
 ];
 
