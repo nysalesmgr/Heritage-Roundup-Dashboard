@@ -2879,8 +2879,8 @@ async function rmsBookingSourceId(client, source){
   for(const t of tries){ const hit = list.find(b => rmsNorm(b.name) === t); if(hit) return hit.id; }
   return 0;
 }
-// RMS shows commission as "10.00%"
-const rmsPct = v => { const n = parseFloat(String(v||'').replace('%','')); return isNaN(n) ? '' : n.toFixed(2) + '%'; };
+// RMS Commission % is a pick-list ("8%", "10%" …) — "8.00%" doesn't match an option and shows blank
+const rmsPct = v => { const n = parseFloat(String(v||'').replace('%','')); return isNaN(n) ? '' : String(n) + '%'; };
 // Look at an existing RMS reservation: rmsInspectReservation('p1', 12345)
 async function rmsInspectReservation(client, id){ return rmsCall(`/reservations/${parseInt(id)}?modelType=full`, 'GET', null, client); }
 

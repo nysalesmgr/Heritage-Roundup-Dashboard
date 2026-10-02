@@ -40,6 +40,7 @@ const ALLOW: Array<[string, RegExp]> = [
   ["POST", /^\/availableAreas$/],
   ["POST", /^\/guests\/search\?modelType=basic$/],
   ["POST", /^\/guests$/],
+  ["GET", /^\/guests\/\d+(\?modelType=(basic|full))?$/],
   ["POST", /^\/reservations$/],
   // Read-only lookups (used to match RMS's mandatory reservation fields)
   ["GET", /^\/reservations\/\d+(\/[A-Za-z]+)?(\?[A-Za-z0-9=&_.-]*)?$/],
