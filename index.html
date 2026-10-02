@@ -1755,7 +1755,7 @@ function editCell(td, ref, field, type){
 
   if(type==='season'){
     input = document.createElement('select');
-    const opts = currentProperty==='boston' ? ['—','9 months','12 months','Spring'] : ['—','Spring','Summer','Fall','NYSE','Sub-License'];
+    const opts = currentProperty==='boston' ? ['—','9 months','12 months','Spring'] : ['—','Spring','Summer','Full Academic Year','NYSE','Sub-License'];
     opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; input.appendChild(op); });
   } else if(type==='student'){
     input = document.createElement('select');
@@ -2904,10 +2904,24 @@ async function rmsIdTypeId(client, idType){
   const hit = list.find(t => rmsNorm(t.description) === n || rmsNorm(t.shortDescription) === n);
   return hit ? hit.id : 0;
 }
+// Mobile in the format RMS saves itself: "+573166209800" (country code kept, spaces/brackets removed)
+function rmsMobile(phone){
+  let p = String(phone||'').trim();
+  if(!p) return '';
+  // "(+57) 316…" or "(57)316…" = country code; "(212) 555-1234" (3 digits, no +) = US area code
+  const m = p.match(/^\(\s*(\+?)\s*(\d{1,4})\s*\)\s*(.*)$/);
+  if(m && (m[1] === '+' || m[2].length <= 2)) p = '+' + m[2] + m[3];
+  const plus = p.startsWith('+') || p.startsWith('00');
+  const digits = p.replace(/^00/,'').replace(/\D/g,'');
+  if(digits.length < 4) return '';
+  return (plus ? '+' : '') + digits;
+}
 // Guest ID details in RMS's own field names
 async function rmsGuestDetails(client, applicant, idType){
   const d = getNYData(applicant.ref_number);
   const out = {};
+  const mob = rmsMobile(applicant.phone);
+  if(mob) out.mobile = mob;
   if(d.dob) out.birthday = rmsISODate(d.dob) + ' 00:00:00';
   const pn = applicant.passport_number || d.passport_number;
   if(pn && String(pn).length > 2) out.passportId = String(pn).trim();
@@ -3204,7 +3218,7 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
     throw new Error(`Missing name: given="${guestPayload.guestGiven}" surname="${guestPayload.guestSurname}"`);
   }
   if(applicant.email && applicant.email.includes('@')) guestPayload.email = applicant.email;
-  guestPayload.mobile = (applicant.phone && applicant.phone.length > 3) ? applicant.phone : '0000000000';
+  guestPayload.mobile = rmsMobile(applicant.phone) || '0000000000';
   Object.assign(guestPayload, details);  // birthday, passportId, passportExpiry, nationalityId, idTypeId
   const guest = await rmsCall('/guests', 'POST', guestPayload, client);
   return guest.id || guest.guestId;
