@@ -37,6 +37,7 @@ const ALLOW: Array<[string, RegExp]> = [
   ["GET", /^\/properties\?modelType=basic$/],
   ["GET", /^\/categories\?modelType=basic&propertyId=\d+$/],
   ["GET", /^\/areas\?modelType=basic&propertyId=\d+&limit=\d+$/],
+  ["POST", /^\/availableAreas$/],
   ["POST", /^\/guests\/search\?modelType=basic$/],
   ["POST", /^\/guests$/],
   ["POST", /^\/reservations$/],

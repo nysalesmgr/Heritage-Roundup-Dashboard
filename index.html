@@ -2794,23 +2794,60 @@ async function openRmsModal(){
   }
 }
 
+// Normalise a stored date to YYYY-MM-DD (accepts YYYY-MM-DD, timestamps, or MM/DD/YYYY)
+function rmsISODate(v){
+  const t = String(v||'').trim();
+  const us = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(us) return `${us[3]}-${us[1].padStart(2,'0')}-${us[2].padStart(2,'0')}`;
+  return toNYDate(t);
+}
+// The applicant's stay dates for RMS, from the dashboard fields
+function rmsStayDates(a){
+  const d = getNYData(a.ref_number);
+  return {
+    moveIn:  rmsISODate(d.move_in  || a.start_date || a.formsite_movein  || ''),
+    moveOut: rmsISODate(d.move_out || a.end_date   || a.formsite_moveout || ''),
+  };
+}
+
+// Only list units that RMS says are free for the applicant's whole stay
 async function rmsLoadAreas(){
   const { client, propId } = rmsSelection();
   const catId  = document.getElementById('rms-category').value;
+  const areaSel = document.getElementById('rms-area');
+  const errEl = document.getElementById('rms-err');
   if(!propId || !catId) return;
+  const a = apps.find(x=>x.ref_number===(rmsSelectedRef||selectedRef));
+  const { moveIn, moveOut } = a ? rmsStayDates(a) : {};
+  if(!moveIn || !moveOut){
+    areaSel.innerHTML = '<option value="">Add move-in and move-out dates first</option>';
+    errEl.textContent = 'Move-in and move-out dates are needed to check which units are available.';
+    return;
+  }
+  areaSel.innerHTML = '<option value="">Checking availability…</option>';
+  errEl.textContent = '';
   try{
-    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET', null, client);
-    const allAreas = Array.isArray(res) ? res : res.result||[];
-    const catIdNum = parseInt(catId);
-    const areas = catId ? allAreas.filter(a=>a.categoryId===catIdNum) : allAreas;
-    const areaSel = document.getElementById('rms-area');
-    areaSel.innerHTML = '<option value="">Select area…</option>';
-    areas.forEach(a=>{
+    const res = await rmsCall('/availableAreas', 'POST', {
+      propertyId: parseInt(propId),
+      categoryIds: [parseInt(catId)],
+      dateFrom: moveIn + ' 14:00:00',
+      dateTo:   moveOut + ' 11:00:00',
+    }, client);
+    const areas = (Array.isArray(res) ? res : res.result||[]).filter(x => !x.categoryId || x.categoryId === parseInt(catId));
+    areaSel.innerHTML = areas.length
+      ? `<option value="">Select area… (${areas.length} available ${fmtDate(moveIn)} – ${fmtDate(moveOut)})</option>`
+      : `<option value="">No units available ${fmtDate(moveIn)} – ${fmtDate(moveOut)}</option>`;
+    areas.sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''), undefined, {numeric:true}));
+    areas.forEach(ar=>{
       const opt = document.createElement('option');
-      opt.value = a.id; opt.textContent = a.name||a.id;
+      opt.value = ar.id; opt.textContent = ar.name||ar.id;
       areaSel.appendChild(opt);
     });
-  }catch(e){ console.error('Areas load error:', e); }
+  }catch(e){
+    console.error('Available areas error:', e);
+    areaSel.innerHTML = '<option value="">Could not check availability</option>';
+    errEl.textContent = 'Could not check availability: ' + e.message;
+  }
 }
 async function rmsLoadCategories(){
   const { client, propId } = rmsSelection();
@@ -2874,8 +2911,7 @@ async function rmsCreateReservation(){
   if(!propId || !catId || !areaId){ errEl.textContent = 'Please select a property, category and area.'; return; }
 
   const d = getNYData(a.ref_number);
-  const moveIn  = d.move_in || a.start_date || '';
-  const moveOut = d.move_out || a.end_date || '';
+  const { moveIn, moveOut } = rmsStayDates(a);
   if(!moveIn || !moveOut){ errEl.textContent = 'Move-in and move-out dates are required.'; return; }
 
   document.getElementById('rms-submit-btn').textContent = 'Creating…';
