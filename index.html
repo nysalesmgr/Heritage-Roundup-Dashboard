@@ -618,11 +618,9 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Apartment</div><div class="il-v" id="t-apt">—</div></div>
           <div><div class="il-l">Move-in Date</div><div class="il-v" id="t-movein">—</div></div>
           <div><div class="il-l">Move-out Date</div><div class="il-v" id="t-moveout">—</div></div>
-          <div><div class="il-l">Occupants</div><div class="il-v" id="t-occ">—</div></div>
+          <div><div class="il-l">Occupants</div><div class="il-v" id="t-occ" title="1, or more when linked to other applicants">—</div></div>
           <div><div class="il-l">Monthly Rate</div><div class="il-v" id="t-rate">—</div></div>
-          <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Payment Plan</div><div class="il-v" id="t-plan">—</div></div>
-          <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Bedroom Selection</div><div class="il-v" id="t-bedroom">—</div></div>
-          <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Viewing Preference</div><div class="il-v" id="t-viewing">—</div></div>
+          <div class="igrid full" style="grid-column:1/-1"><div class="il-l">Payment Plan</div><div class="il-v editable-field" id="t-plan" onclick="editPaymentPlan(this)" style="cursor:pointer">—</div></div>
         </div>
       </div>
       <div class="isec">
@@ -1701,7 +1699,7 @@ function getNYData(ref){ return editableCache[ref] || {}; }
 const FIELD_LABELS = {
   unit:'Unit', move_in:'Move-in', move_out:'Move-out', monthly_rent:'Monthly Rent',
   incentives:'Commission %', vmu:'VMU Date', ipt:'IPT Date', student_status:'Student Status',
-  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source',
+  prev_accommodation:'Prev. Accommodation', season:'Season', lead_source:'Source', payment_plan:'Payment Plan',
   reservation_no:'Reservation #', agr_date:'Agreement Date', payment_due:'Payment Due', remarks:'Remarks'
 };
 
@@ -1709,7 +1707,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','payment_plan','updated_at'];
   const raw = { ...editableCache[ref], ref_number: ref, property: currentProperty, updated_at: new Date().toISOString() };
   const payload = {};
   allowed.forEach(k => { if(raw[k] !== undefined) payload[k] = raw[k]; });
@@ -2098,21 +2096,16 @@ function openPanel(ref){
     document.getElementById('t-apt').textContent      = a.apartment||'—';
     document.getElementById('t-movein').textContent   = fmtDate(a.start_date);
     document.getElementById('t-moveout').textContent  = fmtDate(a.end_date);
-    document.getElementById('t-occ').textContent      = a.occupants||'—';
     document.getElementById('t-rate').textContent     = a.monthly_rate||'—';
-    document.getElementById('t-plan').textContent     = a.payment_plan||'—';
-    document.getElementById('t-bedroom').textContent  = a.bedroom_choice ? (a.bedroom_choice.charAt(0).toUpperCase()+a.bedroom_choice.slice(1)+' Bedroom') : (parseInt(a.occupants)>=2&&(a.apartment||'').includes('Two')?'Both bedrooms':'N/A');
-    document.getElementById('t-viewing').textContent  = a.viewing_preference||'—';
   } else {
     document.getElementById('t-apt').textContent      = d.unit||'—';
     document.getElementById('t-movein').textContent   = d.move_in ? fmtDate(d.move_in) : '—';
     document.getElementById('t-moveout').textContent  = d.move_out ? fmtDate(d.move_out) : '—';
-    document.getElementById('t-occ').textContent      = '—';
     document.getElementById('t-rate').textContent     = d.monthly_rent||'—';
-    document.getElementById('t-plan').textContent     = '—';
-    document.getElementById('t-bedroom').textContent  = 'N/A';
-    document.getElementById('t-viewing').textContent  = '—';
   }
+  // Same for every source: occupants from linked applicants, payment plan from the dashboard
+  document.getElementById('t-occ').textContent  = String(occupantCount(a.ref_number));
+  document.getElementById('t-plan').textContent = getPaymentPlan(a) || '— (click to set)';
 
   // Documents tab
   let docHtml = '';
@@ -2506,6 +2499,34 @@ async function saveNotes(){  if(!selectedRef) return;
 }
 
 // ── PANEL FIELD EDITING ───────────────────────────────────
+// Occupants: 1 by default, plus one for each linked applicant (normally 2 when linked)
+function occupantCount(ref){ return 1 + getLinkedRefs(ref).length; }
+
+const PAYMENT_PLANS = ['Monthly', '2 Installments', 'Upfront'];
+// Map whatever the booking form sent to one of the three plans
+function normalisePlan(v){
+  const t = String(v||'').toLowerCase();
+  if(!t) return '';
+  if(t.includes('month')) return 'Monthly';
+  if(t.includes('install') || /\b2\b|two/.test(t)) return '2 Installments';
+  if(t.includes('upfront') || t.includes('up front') || t.includes('full') || t.includes('one')) return 'Upfront';
+  return '';
+}
+function getPaymentPlan(a){ return getNYData(a.ref_number).payment_plan || normalisePlan(a.payment_plan); }
+function editPaymentPlan(el){
+  const a = apps.find(x=>x.ref_number===selectedRef);
+  if(!a || el.querySelector('select')) return;
+  const cur = getPaymentPlan(a);
+  const sel = document.createElement('select');
+  sel.innerHTML = '<option value="">—</option>' + PAYMENT_PLANS.map(p=>`<option${p===cur?' selected':''}>${p}</option>`).join('');
+  sel.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
+  sel.onclick = e => e.stopPropagation();
+  el.innerHTML=''; el.appendChild(sel); sel.focus();
+  const done = () => { el.textContent = sel.value || '— (click to set)'; };
+  sel.onchange = () => { setNYData(selectedRef, { payment_plan: sel.value }); done(); toast('Payment plan updated ✓'); };
+  sel.onblur = done;
+}
+
 function editPanelFieldEditable(elId, field, el, type){
   const cur = getNYData(selectedRef)[field] || '';
   const input = document.createElement('input');
@@ -3060,7 +3081,7 @@ async function rmsCreateReservation(){
       areaId:        parseInt(areaId),
       arrivalDate:   moveIn + ' 14:00:00',
       departureDate: moveOut + ' 11:00:00',
-      adults:        parseInt(a.occupants||'1'),
+      adults:        occupantCount(a.ref_number),
       status:        'Unconfirmed',
     };
     if(notes)         resPayload.notes            = notes;
