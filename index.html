@@ -3276,6 +3276,14 @@ async function rmsCreateReservation(){
 
     closeRmsModal();
 
+    // Booking created in RMS -> move the applicant (and linked applicants) to Agreement Issued.
+    // setStatus also fills the agreement date and payment due (T+2) if they're blank.
+    if(resId){
+      const ref = rmsSelectedRef || a.ref_number;
+      const cur = apps.find(x=>x.ref_number===ref);
+      if(cur && cur.status !== 'Agreement Issued') await setStatus(ref, 'Agreement Issued');
+    }
+
   } catch(e){
     errEl.textContent = 'Error: ' + e.message;
     document.getElementById('rms-submit-btn').textContent = 'Create Reservation';
