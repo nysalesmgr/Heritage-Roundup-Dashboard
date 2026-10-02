@@ -739,7 +739,7 @@ let editableCache = {};
 // ── BOOT ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('overview-date').textContent =
-    new Date().toLocaleDateString('en-GB',{timeZone:NY_TZ,weekday:'long',day:'numeric',month:'long',year:'numeric'}) + ' (New York)';
+    new Date().toLocaleDateString('en-GB',{timeZone:NY_TZ,weekday:'long',day:'numeric',month:'long',year:'numeric'}) + ' (New York, ' + nyZone() + ')';
   loadStaffPins();
 });
 
@@ -2401,7 +2401,7 @@ function closeLinkStatusModal(){ document.getElementById('link-status-modal').st
 
 async function runDiagnostics(){
   document.getElementById('diag-modal').style.display = 'flex';
-  document.getElementById('diag-timestamp').textContent = 'Running checks… ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ET';
+  document.getElementById('diag-timestamp').textContent = 'Running checks… ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ' + nyZone();
   document.getElementById('diag-results').innerHTML = '<div style="color:var(--t3);font-size:13px">Checking…</div>';
 
   const checks = [];
@@ -2459,7 +2459,7 @@ async function runDiagnostics(){
   const summary = `<div style="font-size:13px;font-weight:700;margin-bottom:12px;color:${passed===total?'var(--agr)':'var(--rej)'}">${passed}/${total} checks passed</div>`;
 
   document.getElementById('diag-results').innerHTML = summary + html;
-  document.getElementById('diag-timestamp').textContent = 'Last run: ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ET';
+  document.getElementById('diag-timestamp').textContent = 'Last run: ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ' + nyZone();
 }
 
 async function saveRemarks(){
@@ -3046,6 +3046,11 @@ function nyDateISO(date = new Date()){
 }
 // True when a timestamp carries its own time zone (e.g. ...T21:10:04+00:00 or ...Z)
 function hasTZ(v){ return /\d{2}:\d{2}(:\d{2}(\.\d+)?)?\s*(Z|[+-]\d{2}(:?\d{2})?)$/i.test(String(v).trim()); }
+// 'EST' or 'EDT' for the given moment in New York
+function nyZone(date = new Date()){
+  const part = new Intl.DateTimeFormat('en-US',{ timeZone: NY_TZ, timeZoneName:'short' }).formatToParts(date).find(p=>p.type==='timeZoneName');
+  return part ? part.value : 'ET';
+}
 function todayNY(){ return nyDateISO(new Date()); }
 // Add whole days to a YYYY-MM-DD date (no time-zone drift)
 function addDaysISO(iso, n){
@@ -3083,7 +3088,7 @@ function fmtDateTime(d){
     }
     const date = new Date(v);
     if(isNaN(date.getTime())) return d;
-    return date.toLocaleString('en-GB',{ timeZone: NY_TZ, day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' ET';
+    return date.toLocaleString('en-GB',{ timeZone: NY_TZ, day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' ' + nyZone(date);
   }catch(e){ return d; }
 }
 // Format a typed amount as money: 3200 -> $3,200 ; 3200.5 -> $3,200.50. Anything that isn't a plain number is left as typed.
