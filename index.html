@@ -3862,6 +3862,11 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
   const guest = await rmsCall('/guests', 'POST', guestPayload, client);
   const gid = guest && (guest.id || guest.guestId);
   if(!gid) throw new Error('RMS did not return a guest number — guest not created');
+  // RMS ignores gender and ID type when a guest is created (checked on guests 1441/1442/1444) — set them straight after
+  const after = {};
+  if(details.gender) after.gender = details.gender;
+  if(details.idTypeId) after.idTypeId = details.idTypeId;
+  if(Object.keys(after).length && !(await rmsUpdate(client, 'guests', gid, after))) toast('⚠️ Guest created, but gender / ID type could not be set — add them in RMS');
   return gid;
 }
 
