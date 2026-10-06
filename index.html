@@ -3273,7 +3273,7 @@ async function openRmsModal(){
           <div><strong>${esc(la.first_name||'')} ${esc(la.last_name||'')}</strong> · ${esc(la.email||'—')} · Unit: ${esc(laUnit||'—')}</div>
           <div style="color:var(--t3);margin-top:4px">${sameUnit
             ? 'Same unit — one booking with Adults 2.'
-            : `A second booking is created for them (unit ${esc(laUnit||'?')}, Adults 1, no charges). The main booking carries the whole-unit deposit <strong>${formatMoney(String(total))}</strong> and commission.`}</div>
+            : `A second booking is created for them (unit ${esc(laUnit||'?')}, 2 guests, no charges). The main booking carries the whole-unit deposit <strong>${formatMoney(String(total))}</strong> and commission; all documents go on the L room's booking.`}</div>
         `;
         linkedSection.style.display = 'block';
       }
@@ -3732,7 +3732,7 @@ async function rmsCreateReservation(){
         const p2 = {
           guestId: g2, categoryId: second.area.categoryId, areaId: second.area.id,
           arrivalDate: second.stay.moveIn + ' 15:00:00', departureDate: second.stay.moveOut + ' 11:00:00',
-          adults: 1, ...shared,
+          adults: mainPayload.adults, ...shared,   // both people live in the apartment: guests 2 on both bookings
         };
         const r2 = await rmsCall('/reservations', 'POST', p2, rmsClient);
         resId2 = r2.id || r2.reservationId;
@@ -3743,10 +3743,11 @@ async function rmsCreateReservation(){
       }
     }
 
-    // Documents: each person's onto their own booking
+    // Documents: everyone's go onto one booking — the L room when the pair has L / R, otherwise the main booking
     toast('Uploading documents to RMS…');
-    const n1 = await rmsUploadDocs(rmsClient, resId, a);
-    const n2 = resId2 ? await rmsUploadDocs(rmsClient, resId2, second.la) : 0;
+    const docRes = (roomSide && roomSide[2].toUpperCase()==='R' && resId2) ? resId2 : resId;
+    const n1 = await rmsUploadDocs(rmsClient, docRes, a);
+    const n2 = second ? await rmsUploadDocs(rmsClient, docRes, second.la) : 0;
     toast(resId2
       ? `✓ Bookings ${resId} (main) and ${resId2} created — ${n1+n2} document(s) uploaded`
       : `✓ Booking ${resId} created — ${n1} document(s) uploaded`);
