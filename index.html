@@ -3420,7 +3420,10 @@ async function rmsLoadAreas(){
     } else if(booked && booked.area){
       areaSel.value = String(booked.area.id);
       const la = booked.partner ? apps.find(x=>x.ref_number===getLinkedRefs(a.ref_number)[0]) : null;
-      rmsUnitHint(`✓ Booked "${rmsBookedRoomText(a)}" → ${booked.area.name}` + (la ? ` · ${la.first_name||''} ${la.last_name||''} → ${booked.partner.name} (second booking)` : '') + ' — free for these dates.', '#15803d');
+      const rm = booked.roommate;
+      rmsUnitHint(`✓ Booked "${rmsBookedRoomText(a)}" → ${booked.area.name}`
+        + (la ? ` · ${la.first_name||''} ${la.last_name||''} → ${booked.partner.name} (second booking)` : '')
+        + (rm ? ` · next to ${rm.first_name||''} ${rm.last_name||''} (${rmsDashboardUnit(rm)})` : '') + ' — free for these dates.', '#15803d');
     } else if(booked){
       rmsUnitHint(`⚠️ Booked "${rmsBookedRoomText(a)}" (${booked.apt}) — none free for these dates. Pick a unit.`, '#b45309');
     } else if(unit){
@@ -3460,6 +3463,15 @@ function rmsPickBookedArea(a, free){
   const byName = n => free.find(x => rmsNorm(x.name) === rmsNorm(n));
   const pair = getLinkedRefs(a.ref_number).some(r => { const la = apps.find(x=>x.ref_number===r); return la && rmsNorm(rmsDashboardUnit(la)) === rmsNorm(rmsDashboardUnit(a)); });
   const second = !!a._parent_ref;
+  // Room-mate already placed in a room (e.g. applied first through Formsite): take the other room of that apartment
+  for(const r of getLinkedRefs(a.ref_number)){
+    const la = apps.find(x=>x.ref_number===r);
+    const m = la && rmsDashboardUnit(la).match(/^(.*\d)\s*([LR])$/i);
+    if(m){
+      const other = byName(m[1] + (m[2].toUpperCase()==='L' ? 'R' : 'L'));
+      if(other) return { area: other, apt: m[1], roommate: la };
+    }
+  }
   for(const apt of apts){
     const whole = byName(apt);
     if(whole) return { area: whole, apt };
@@ -3614,6 +3626,7 @@ async function rmsSecondBooking(client, propId, main, mainAreaId){
   const ref = getLinkedRefs(main.ref_number)[0];
   const la = ref ? apps.find(x=>x.ref_number===ref) : null;
   if(!la) return null;
+  if(getNYData(la.ref_number).reservation_no) return null; // already booked in RMS (e.g. applied first through Formsite)
   const unit = rmsDashboardUnit(la);
   if(!unit) throw new Error(`Linked applicant ${la.first_name||''} ${la.last_name||''} has no Unit on the dashboard — add their unit first.`);
   const area = rmsMatchArea(await rmsAllAreas(client, propId), unit);
