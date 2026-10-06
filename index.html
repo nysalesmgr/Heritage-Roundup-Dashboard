@@ -2748,7 +2748,8 @@ function editIdType(el){
 function detectDocType(text, mrz){
   const t = String(text||'').toUpperCase();
   const flat = t.replace(/\s+/g,'');
-  if((mrz && (mrz.date_of_birth || mrz.document_number) && /\nP[A-Z<]/.test('\n'+t.split('\n').map(l=>l.replace(/\s+/g,'')).join('\n'))) || /PASSPORT|PASSEPORT|PASAPORTE|REISEPASS/.test(t)) return 'Passport';
+  // Passport = its machine-readable line ("P<GBRSMITH<<JOHN…") or the word passport; a printed word like "PURPOSES" doesn't count
+  if((mrz && (mrz.date_of_birth || mrz.document_number) && /\nP[A-Z<][A-Z<]{3}[A-Z<]*<</.test('\n'+t.split('\n').map(l=>l.replace(/\s+/g,'')).join('\n'))) || /PASSPORT|PASSEPORT|PASAPORTE|REISEPASS/.test(t)) return 'Passport';
   if(/DRIVER'?S?\s*LICEN[CS]E|DRIVING\s*LICEN[CS]E|PERMIS\s*DE\s*CONDUIRE|LICENCIA\s*DE\s*CONDUCIR/.test(t)) return 'Driver Licence';
   if(/IDENTIFICATION\s*CARD|IDENTITY\s*CARD|\bID\s*CARD\b|NON-?DRIVER/.test(t) || /(^|\n)I[A-Z<][A-Z<]{3}[A-Z0-9<]{25}/.test(flat)) return 'ID Card';
   return '';
@@ -3004,13 +3005,13 @@ async function scanPassport(source, ref, manual=false){
     if(error || !text){ if(manual) toast('Could not read the document'); return; }
 
     const extracted = parsePassportMRZ(text);
+    const docType = detectDocType(text, { ...extracted });
     if(!extracted.gender) extracted.gender = genderFromID(text);
     if(!extracted.document_number || !extracted.expiry_date || !extracted.date_of_birth){
       const idd = idDetailsFromText(text);
       ['document_number','expiry_date','date_of_birth'].forEach(k=>{ if(!extracted[k] && idd[k]) extracted[k] = idd[k]; });
     }
     markScanned(ref);
-    const docType = detectDocType(text, extracted);
     if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth && !extracted.gender && !docType){
       if(manual) toast('No passport details found on this document');
       return;
