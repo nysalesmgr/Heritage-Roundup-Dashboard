@@ -2286,7 +2286,7 @@ function openPanel(ref){
   // Auto-read the passport / ID once (the background scan after loading normally gets there first)
   {
     const cached = editableCache[a.ref_number] || {};
-    if(needsScan(a) || (!cached.doc_scanned_at && !scanTried.has(a.ref_number) && !(cached.dob && cached.nationality && cached.gender && cached.id_type && cached.passport_number))){
+    if(needsScan(a)){
       const src = passportScanSource(a);
       if(src) scanPassport(src, a.ref_number); // starts straight away, runs in the background
     }
@@ -2552,11 +2552,11 @@ function dataChecks(){
     : unlinked.length ? `Second person not linked yet: ${names(unlinked)}` : 'All 2-name forms have two linked rows' });
 
   // Passport / ID read
-  const notScanned = active.filter(a => isBE(a) && passportScanSource(a) && !(editableCache[a.ref_number]||{}).passport_number && !scanTried.has(a.ref_number) && !(editableCache[a.ref_number]||{}).doc_scanned_at);
-  const unreadable = active.filter(a => isBE(a) && !(editableCache[a.ref_number]||{}).passport_number && ((editableCache[a.ref_number]||{}).doc_scanned_at || scanTried.has(a.ref_number)));
+  const notScanned = active.filter(a => passportScanSource(a) && !(editableCache[a.ref_number]||{}).doc_scanned_at && !scanTried.has(a.ref_number));
+  const unreadable = active.filter(a => passportScanSource(a) && scanMissing(a) && ((editableCache[a.ref_number]||{}).doc_scanned_at || scanTried.has(a.ref_number)));
   checks.push({ ok: !notScanned.length && !unreadable.length, label: 'Passport / ID read', detail:
     notScanned.length ? `Not scanned yet: ${names(notScanned)}`
-    : unreadable.length ? `Scanned but no ID number found — check the document: ${names(unreadable)}` : 'All active booking engine applicants have ID details' });
+    : unreadable.length ? `Scanned but ID details still missing (number, expiry, date of birth or type) — retried daily, or check the document: ${names(unreadable)}` : 'All active applicants have ID details' });
 
   // ID still valid on move-in day
   const expired = active.filter(a => { const c = editableCache[a.ref_number]||{}; const exp = rmsISODate(c.passport_expiry||''); const mi = rmsISODate(c.move_in||a.start_date||'') || todayNY(); return exp && exp < mi; });
@@ -2996,11 +2996,19 @@ function passportScanSource(a){
 const scanTried = new Set();
 function markScanned(ref){
   scanTried.add(ref);
-  if(!(editableCache[ref]||{}).doc_scanned_at) setNYData(ref, { doc_scanned_at: new Date().toISOString() });
+  setNYData(ref, { doc_scanned_at: new Date().toISOString() });
+}
+// Scan until the ID details are complete: never read yet, or read on an earlier day but still missing
+// the ID number / expiry / date of birth / ID type (retried once a day, in case the document or reader changed)
+function scanMissing(a){
+  const c = editableCache[a.ref_number]||{};
+  return !(c.passport_number || a.passport_number) || !(c.passport_expiry || a.passport_expiry) || !c.dob || !c.id_type;
 }
 function needsScan(a){
+  if(scanTried.has(a.ref_number)) return false;
   const c = editableCache[a.ref_number]||{};
-  return !c.doc_scanned_at && !scanTried.has(a.ref_number) && !c.passport_number;
+  if(!c.doc_scanned_at) return true;
+  return scanMissing(a) && String(c.doc_scanned_at).slice(0,10) < todayNY();
 }
 // New booking engine applications (Boston + NY, both licensees): read the passport / ID in the background,
 // one at a time, so details are filled in before anyone opens the applicant
@@ -3009,8 +3017,11 @@ async function autoScanNewApplications(){
   if(bgScanRunning) return;
   bgScanRunning = true;
   try{
-    const isBE = a => /Booking Engine/.test(a._source||'');
-    const queue = apps.filter(a => isBE(a) && needsScan(a) && passportScanSource(a)).slice(0, 15);
+    // Every active applicant (booking engine first, newest first), not ones dropped or finished
+    const active = a => !['To Drop','Drop Out ($500)','Payment Received/Finalized'].includes(a.status);
+    const isBE = a => /Booking Engine/.test(a._source||'') ? 0 : 1;
+    const queue = apps.filter(a => active(a) && needsScan(a) && passportScanSource(a))
+      .sort((x,y) => isBE(x) - isBE(y) || String(y.created_at||'').localeCompare(String(x.created_at||''))).slice(0, 15);
     for(const a of queue){
       if(!needsScan(a)) continue;
       scanTried.add(a.ref_number);
