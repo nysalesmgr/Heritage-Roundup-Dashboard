@@ -3906,7 +3906,13 @@ async function rmsCreateReservation(){
     // Two people on one booking engine form, booked into a two-bedroom: each gets their own room (L / R)
     const areaName = document.getElementById('rms-area').selectedOptions[0]?.textContent || '';
     const roomSide = areaName.trim().match(/^(.*\d)([LR])$/i);
+    // Only a real L / R room pair counts: "235 5R" is a whole apartment (R = rear), so check the other room exists in RMS
+    let roomPair = false;
     if(roomSide){
+      const otherName = roomSide[1] + (roomSide[2].toUpperCase()==='L' ? 'R' : 'L');
+      try{ roomPair = (await rmsAllAreas(rmsClient, propId)).some(x => rmsNorm(x.name) === rmsNorm(otherName)); }catch(e){}
+    }
+    if(roomSide && roomPair){
       for(const r of getLinkedRefs(a.ref_number)){
         const la = apps.find(x=>x.ref_number===r);
         if(la && rmsNorm(rmsDashboardUnit(la)) === rmsNorm(rmsDashboardUnit(a))){
@@ -3982,7 +3988,7 @@ async function rmsCreateReservation(){
 
     // Documents: everyone's go onto one booking — the L room when the pair has L / R, otherwise the main booking
     toast('Uploading documents to RMS…');
-    const docRes = (roomSide && roomSide[2].toUpperCase()==='R' && resId2) ? resId2 : resId;
+    const docRes = (roomSide && roomPair && roomSide[2].toUpperCase()==='R' && resId2) ? resId2 : resId;
     // Two people sharing one unit (studio / 1 bedroom): one booking, both people's documents on it
     const sharedLa = second ? null : getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r))
       .find(x => x && !getNYData(x.ref_number).reservation_no && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(rmsDashboardUnit(a)));
