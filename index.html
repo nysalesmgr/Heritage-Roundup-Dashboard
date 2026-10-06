@@ -3284,12 +3284,17 @@ async function openRmsModal(){
       : 'Connected ✓ — fill in details below';
     document.getElementById('rms-form').style.display = 'block';
 
-    // Auto-pick the property whose RMS units include the dashboard unit
+    // Property: the applicant's city decides (Boston page → Boston); in NY, the unit picks between the 4 properties
     rmsAreaCache = {};
     rmsUnitHint('');
     const unit = rmsDashboardUnit(a);
-    if(unit){
-      const opts = [...propSel.options].filter(o=>o.value);
+    const isBoston = (a._property || currentProperty) === 'boston';
+    const cityOpts = [...propSel.options].filter(o=>o.value && (/boston/i.test(o.textContent) === isBoston));
+    if(cityOpts.length === 1){
+      propSel.value = cityOpts[0].value;
+      await rmsLoadCategories();
+    } else if(unit){
+      const opts = cityOpts.length ? cityOpts : [...propSel.options].filter(o=>o.value);
       const hits = [];
       await Promise.all(opts.map(async o=>{
         const [c, pid] = o.value.split('|');
@@ -3425,6 +3430,27 @@ async function rmsLoadAreas(){
     errEl.textContent = 'Could not check availability: ' + e.message;
   }
 }
+// What the applicant booked, in words (booking engine apartment / bedroom fields, then the dashboard unit)
+function rmsBookedRoomText(a){
+  if(!a) return '';
+  const raw = a.raw_data || {};
+  return String(a.apartment || raw.apartment_name_full || raw.apartment_name || raw.bedroom_label || raw.bedroom || a.bedroom_choice || getNYData(a.ref_number).unit || '').trim();
+}
+// Match the booked room to an RMS category: studio / one bedroom → "1 Bedroom"; two+ bedrooms or a room → "Private Bedroom"
+function rmsGuessCategory(a, opts){
+  const t = rmsBookedRoomText(a).toLowerCase();
+  if(!t || !opts.length) return null;
+  const has = (o, re) => re.test(o.textContent.toLowerCase());
+  const pick = re => { const m = opts.filter(o=>has(o, re)); return m.length === 1 ? m[0] : null; };
+  if(/studio/.test(t)) return pick(/studio/) || pick(/\b(1|one)\s*-?\s*bed/);
+  if(/\b(1|one)\s*-?\s*(bed|br\b)/.test(t)) return pick(/\b(1|one)\s*-?\s*bed/);
+  if(/\b(2|two|3|three|4|four)\s*-?\s*(bed|br\b)|private|room\b/.test(t)){
+    const n = (t.match(/\b(2|two|3|three|4|four)\b/)||[])[1];
+    const alt = {2:'2|two',two:'2|two',3:'3|three',three:'3|three',4:'4|four',four:'4|four'}[n];
+    return pick(/private/) || (alt ? pick(new RegExp('\\b(' + alt + ')\\s*-?\\s*bed')) : null);
+  }
+  return null;
+}
 async function rmsLoadCategories(){
   const { client, propId } = rmsSelection();
   if(!propId) return;
@@ -3448,10 +3474,18 @@ async function rmsLoadCategories(){
         if(match && [...catSel.options].some(o=>o.value===String(match.categoryId))){
           catSel.value = String(match.categoryId);
           await rmsLoadAreas();
-        } else if(!match){
-          rmsUnitHint(`Dashboard unit "${unit}" wasn't found at this property — choose a category and unit.`, '#b45309');
+          return;
         }
       }catch(e){ console.warn('Unit lookup failed:', e.message); }
+    }
+    // No RMS unit matched: work out the room type from what was booked ("Two Bedroom — 01", "Studio" …)
+    const guess = rmsGuessCategory(a, [...catSel.options].filter(o=>o.value));
+    if(guess){
+      catSel.value = guess.value;
+      await rmsLoadAreas();
+      rmsUnitHint(`Room type from the booking ("${rmsBookedRoomText(a)}") → ${guess.textContent}. Pick the unit.`, '#15803d');
+    } else if(unit){
+      rmsUnitHint(`Dashboard unit "${unit}" wasn't found at this property — choose a category and unit.`, '#b45309');
     }
   }catch(e){ console.error('Categories load error:', e); }
 }
