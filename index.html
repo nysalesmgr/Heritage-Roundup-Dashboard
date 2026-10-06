@@ -1795,7 +1795,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','first_name','last_name','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','first_name','last_name','scanned_first_name','scanned_last_name','updated_at'];
   // Send only the fields that changed (so one person's save can't undo another's), and keep the
   // record's own property even if the view was switched while this save was pending
   const prop = (apps.find(x=>x.ref_number===ref)||{})._property || before.property || currentProperty;
@@ -2273,6 +2273,15 @@ function openPanel(ref){
   switchTab('licensee');
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
+
+  // Name on the document differs from the form (read earlier, e.g. by the background scan) → show it again
+  {
+    const c = editableCache[a.ref_number] || {};
+    const diffs = [];
+    if(c.scanned_first_name && a.first_name && c.scanned_first_name.toUpperCase() !== String(a.first_name).toUpperCase()) diffs.push({ field:'First Name', form:a.first_name, scan:c.scanned_first_name });
+    if(c.scanned_last_name && a.last_name && c.scanned_last_name.toUpperCase() !== String(a.last_name).toUpperCase()) diffs.push({ field:'Last Name', form:a.last_name, scan:c.scanned_last_name });
+    if(diffs.length) showScanDiscrepancies(diffs, a.ref_number, null);
+  }
 
   // Auto-read the passport / ID once (the background scan after loading normally gets there first)
   {
@@ -3045,20 +3054,21 @@ async function scanPassport(source, ref, manual=false){
     const discrepancies = [];
     const updates = {};
 
-    // DOB - fill if blank
+    // DOB - follows the document
     if(extracted.date_of_birth){
       const cached = editableCache[ref]||{};
-      if(!cached.dob){
+      if(rmsISODate(cached.dob||'') !== extracted.date_of_birth){
         updates.dob = extracted.date_of_birth;
         const el = document.getElementById('t-dob');
         if(el && selectedRef === ref) el.textContent = fmtDatePlain(extracted.date_of_birth);
       }
     }
 
-    // Nationality - fill if blank (saved as the country name, e.g. "China")
+    // Nationality - follows a passport / ID card; a US licence only fills it when blank (it's the issuing country)
     if(extracted.nationality){
       const cached = editableCache[ref]||{};
-      if(!cached.nationality){
+      const fromLicence = docType !== 'Passport' && extracted.nationality === 'USA' && !parsePassportMRZ(text).nationality;
+      if(fromLicence ? !cached.nationality : cached.nationality !== countryFromMRZ(extracted.nationality)){
         updates.nationality = countryFromMRZ(extracted.nationality);
         const el = document.getElementById('t-nationality');
         if(el && selectedRef === ref) el.textContent = updates.nationality;
@@ -3075,14 +3085,21 @@ async function scanPassport(source, ref, manual=false){
       }
     }
 
-    // Gender - fill if blank (passport MRZ, or "SEX M/F" on a driver licence / ID)
+    // Gender - follows the document (passport MRZ, or "SEX / GENDER M/F" on a driver licence / ID)
     if(extracted.gender){
       const cached = editableCache[ref]||{};
-      if(!cached.gender){
+      if(cached.gender !== extracted.gender){
         updates.gender = extracted.gender;
         const el = document.getElementById('t-gender');
         if(el && selectedRef === ref) el.textContent = extracted.gender;
       }
+    }
+
+    // Keep the name read from the document, so a difference shows whenever this applicant is opened later
+    if(extracted.first_name || extracted.last_name){
+      const sf = nameCase(extracted.first_name||''), sl = nameCase(extracted.last_name||'');
+      const c = editableCache[ref]||{};
+      if(c.scanned_first_name !== sf || c.scanned_last_name !== sl) setNYData(ref, { scanned_first_name: sf, scanned_last_name: sl });
     }
 
     // Check for discrepancies
