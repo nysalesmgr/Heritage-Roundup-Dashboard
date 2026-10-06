@@ -2214,11 +2214,23 @@ function openPanel(ref){
   let docHtml = '';
   if(isBookingEngine){
     const occ = parseInt(a.occupants)||1;
-    const d1 = [['Passport / ID','passport_1_url'],['I-20','i20_1_url'],['Visa','visa_1_url']];
-    const d2 = [['Passport / ID (Licensee 2)','passport_2_url'],['I-20 (Licensee 2)','i20_2_url'],['Visa (Licensee 2)','visa_2_url']];
-    docHtml += '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:10px">Licensee 1</div>';
-    docHtml += d1.map(([l,k])=>docRow(l, a[k])).join('');
-    if(occ >= 2){ docHtml += '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin:14px 0 10px">Licensee 2</div>'; docHtml += d2.map(([l,k])=>docRow(l, a[k])).join(''); }
+    let occD = []; try{ occD = JSON.parse((a.raw_data||{}).occupants_details||'[]'); }catch(e){}
+    // The booking engine may send the passport / ID as passport_N_url or as the "driver licence" upload,
+    // plus enrolment and internship letters; I-20 / Visa only when sent
+    const docsFor = (n, o) => {
+      const own = n === 1;
+      const list = [
+        ['Passport / ID', (own ? a.passport_1_url || a.license_url : a.passport_2_url) || o?.driver_license_url, true],
+        ['I-20', own ? a.i20_1_url : a.i20_2_url],
+        ['Visa', own ? a.visa_1_url : a.visa_2_url],
+        ['Enrollment Letter', (own ? a.enrollment_url : '') || o?.enrollment_letter_url],
+        ['Internship Letter', (own ? a.internship_url : '') || o?.internship_offer_url],
+      ];
+      return list.filter(([,u,always]) => u || always).map(([l,u]) => docRow(l + (n === 2 ? ' (Licensee 2)' : ''), u)).join('');
+    };
+    const hdr = (t, top) => `<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin:${top}px 0 10px">${t}</div>`;
+    docHtml += hdr('Licensee 1', 0) + docsFor(1, a._parent_ref ? null : occD[0]);
+    if(occ >= 2 && !a._parent_ref){ docHtml += hdr('Licensee 2', 14) + docsFor(2, occD[1]); }
   } else {
     const isDomestic = (a._source === 'Domestic' || (a.formsite_source && !a.formsite_source.includes('International')));
     const docs = isDomestic
