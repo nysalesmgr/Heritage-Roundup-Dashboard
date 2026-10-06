@@ -2801,10 +2801,10 @@ async function scanPassport(source, ref, manual=false){
 
     // Check for discrepancies
     if(extracted.first_name && a.first_name && extracted.first_name.toUpperCase() !== a.first_name.toUpperCase()){
-      discrepancies.push({ field: 'First Name', form: a.first_name, scan: extracted.first_name });
+      discrepancies.push({ field: 'First Name', form: a.first_name, scan: nameCase(extracted.first_name) });
     }
     if(extracted.last_name && a.last_name && extracted.last_name.toUpperCase() !== a.last_name.toUpperCase()){
-      discrepancies.push({ field: 'Last Name', form: a.last_name, scan: extracted.last_name });
+      discrepancies.push({ field: 'Last Name', form: a.last_name, scan: nameCase(extracted.last_name) });
     }
     // Passport number + expiry: the document is the source of truth, so the scanned value replaces the form's
     const pUpd = {};
@@ -2926,9 +2926,12 @@ function showScanDiscrepancies(discrepancies, ref, extracted){
   toast('⚠️ Document scan found differences — review below');
 }
 
+// Passports print names in capitals: "JONIA WEN YU" -> "Jonia Wen Yu"
+function nameCase(v){ return String(v||'').toLowerCase().replace(/(^|[\s'-])([a-z])/g,(m,p,c)=>p+c.toUpperCase()); }
 async function acceptScanValue(ref, field, value, btn){
   const a = apps.find(x=>x.ref_number===ref);
   if(!a) return;
+  if(field === 'First Name' || field === 'Last Name') value = nameCase(value);
   const col = field === 'First Name' ? 'first_name' : field === 'Last Name' ? 'last_name' : '';
   if(col){
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${a._table||'formsite_submissions'}?ref_number=eq.${encodeURIComponent(ref)}`, {
