@@ -298,7 +298,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ni" onclick="loadApps(true)"><span class="ni-icon">↻</span> Refresh</div>
       <div class="ni" onclick="exportCSV()"><span class="ni-icon">↓</span> Export CSV</div>
       <div class="ni" onclick="changePin()"><span class="ni-icon">⚙</span> Change PIN</div>
-      <div class="ni" onclick="runDiagnostics()"><span class="ni-icon">🔍</span> Run Diagnostics</div>
+      <div class="ni" onclick="runDiagnostics()"><span class="ni-icon">🔍</span> Run Diagnostics<span class="ni-badge" id="diag-badge" style="display:none;background:#b45309" title="Some data checks need attention">!</span></div>
     </nav>
     <div class="sb-stats">
       <div class="sb-stat-label" id="sb-prop-label">Boston</div>
@@ -970,7 +970,8 @@ async function loadApps(showMsg){
     if(prop !== currentProperty){ reloadPending = true; return; }
     refreshAll();
     if(showMsg) toast('Loaded ' + apps.length + ' applications ✓');
-    setTimeout(autoScanNewApplications, 1500);
+    updateDiagBadge();
+    setTimeout(()=>autoScanNewApplications().then(updateDiagBadge), 1500);
   } catch(e){
     console.error('loadApps error:', e);
     toast('Loading failed — click Refresh to try again');
@@ -2504,6 +2505,77 @@ async function applyLinkedStatus(){
 
 function closeLinkStatusModal(){ document.getElementById('link-status-modal').style.display='none'; }
 
+// ── DATA CHECKS (also run after every load; a "!" on Run Diagnostics means one failed) ──
+function appDocUrls(a){
+  let occ = []; try{ occ = JSON.parse((a.raw_data||{}).occupants_details||'[]'); }catch(e){}
+  const o = a._parent_ref ? null : occ[0];
+  return [a.passport_1_url || a.license_url || o?.driver_license_url, a.i20_1_url, a.visa_1_url,
+          a.enrollment_url || o?.enrollment_letter_url, a.internship_url || o?.internship_offer_url].filter(Boolean);
+}
+function dataChecks(){
+  const checks = [];
+  const active = apps.filter(a => !['To Drop','Drop Out ($500)','Payment Received/Finalized'].includes(a.status));
+  const isBE = a => /Booking Engine/.test(a._source||'');
+  const names = list => list.map(a => `${a.first_name||''} ${a.last_name||''} (${a.ref_number})`.trim()).join(', ');
+  const occOf = a => { try{ return JSON.parse((a.raw_data||{}).occupants_details||'[]'); }catch(e){ return []; } };
+
+  // Files sent by the form but not visible in the Documents tab
+  const lostDocs = apps.filter(a => isBE(a) && !a._parent_ref && (Object.keys(a.raw_data||{}).some(k=>k.startsWith('stored_')) || occOf(a).some(o=>o.driver_license_url)) && !appDocUrls(a).length);
+  checks.push({ ok: !lostDocs.length, label: 'Documents shown', detail: lostDocs.length ? `Form sent files but the Documents tab shows none: ${names(lostDocs)}` : 'Every application with files shows them' });
+
+  // Two names on the form → two linked rows
+  const missing2 = apps.filter(a => isBE(a) && !a._parent_ref && occOf(a)[1] && (occOf(a)[1].first_name || occOf(a)[1].last_name) && !apps.some(x => x._parent_ref === String(a.ref_number)));
+  const unlinked = apps.filter(a => a._parent_ref && !getLinkedRefs(a._parent_ref).includes(a.ref_number));
+  checks.push({ ok: !missing2.length && !unlinked.length, label: 'Second person rows', detail:
+    missing2.length ? `2 names on the form but only one row: ${names(missing2)}`
+    : unlinked.length ? `Second person not linked yet: ${names(unlinked)}` : 'All 2-name forms have two linked rows' });
+
+  // Passport / ID read
+  const notScanned = active.filter(a => isBE(a) && passportScanSource(a) && !(editableCache[a.ref_number]||{}).passport_number && !scanTried.has(a.ref_number) && !(editableCache[a.ref_number]||{}).doc_scanned_at);
+  const unreadable = active.filter(a => isBE(a) && !(editableCache[a.ref_number]||{}).passport_number && ((editableCache[a.ref_number]||{}).doc_scanned_at || scanTried.has(a.ref_number)));
+  checks.push({ ok: !notScanned.length && !unreadable.length, label: 'Passport / ID read', detail:
+    notScanned.length ? `Not scanned yet: ${names(notScanned)}`
+    : unreadable.length ? `Scanned but no ID number found — check the document: ${names(unreadable)}` : 'All active booking engine applicants have ID details' });
+
+  // Booked unit understood (Boston website names → RMS units)
+  const unknownUnit = active.filter(a => isBE(a) && a._property === 'boston' && !(editableCache[a.ref_number]||{}).reservation_no && rmsDashboardUnit(a)
+    && !rmsBookedApartments(a).length && !/^922\s/i.test(rmsDashboardUnit(a)));
+  checks.push({ ok: !unknownUnit.length, label: 'Units match RMS', detail: unknownUnit.length ? `Unit name not in the Boston unit list: ${unknownUnit.map(a=>`${rmsDashboardUnit(a)} (${a.ref_number})`).join(', ')}` : 'Every booked unit maps to RMS' });
+
+  // Running the latest version
+  checks.push({ ok: !newVersionReady, label: 'Dashboard version', detail: newVersionReady ? 'A newer version is live — click Reload at the bottom of the screen' : 'Up to date' });
+  return checks;
+}
+function updateDiagBadge(){
+  const el = document.getElementById('diag-badge');
+  if(el) el.style.display = dataChecks().some(c => !c.ok) ? '' : 'none';
+}
+
+// ── NEW VERSION CHECK: compare the live page's code with the code running here ──
+let newVersionReady = false;
+const runningCode = () => [...document.scripts].filter(s=>!s.src).map(s=>s.textContent).join('\n');
+async function checkForNewVersion(){
+  if(newVersionReady) return;
+  try{
+    const html = await fetch(location.pathname + '?nocache=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '');
+    if(!html) return;
+    const live = [...new DOMParser().parseFromString(html, 'text/html').scripts].filter(s=>!s.src).map(s=>s.textContent).join('\n');
+    if(live && live.trim() !== runningCode().trim()){
+      newVersionReady = true;
+      const bar = document.createElement('div');
+      bar.id = 'new-version-bar';
+      bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;gap:12px;align-items:center;font-family:Inter,sans-serif';
+      bar.innerHTML = '<span>A new version of the dashboard is available.</span><button style="background:var(--coral);color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:600">Reload</button>';
+      bar.querySelector('button').onclick = () => location.reload();
+      document.body.appendChild(bar);
+      updateDiagBadge();
+    }
+  }catch(e){ /* offline — try again later */ }
+}
+setInterval(checkForNewVersion, 3 * 60 * 1000);
+window.addEventListener('focus', checkForNewVersion);
+setTimeout(checkForNewVersion, 20000);
+
 async function runDiagnostics(){
   document.getElementById('diag-modal').style.display = 'flex';
   document.getElementById('diag-timestamp').textContent = 'Running checks… ' + new Date().toLocaleString('en-GB',{timeZone:NY_TZ}) + ' ' + nyZone();
@@ -2548,6 +2620,11 @@ async function runDiagnostics(){
   // 10. Apps with missing names
   const noName = apps.filter(a=>!a.first_name && !a.last_name);
   checks.push({ ok: noName.length===0, label:'Apps with missing names', detail: noName.length===0 ? 'All apps have names' : `${noName.length} app(s) missing name: ${noName.map(a=>a.ref_number).join(', ')}` });
+
+  // 11+. Data checks (documents, second person rows, ID scan, units, version)
+  await checkForNewVersion();
+  checks.push(...dataChecks());
+  updateDiagBadge();
 
   // Render results
   const html = checks.map(c=>`
