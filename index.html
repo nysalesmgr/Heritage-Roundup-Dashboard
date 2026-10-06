@@ -3521,7 +3521,32 @@ function rmsStayDates(a){
 function rmsDashboardUnit(a){
   if(!a) return '';
   const d = getNYData(a.ref_number);
-  return String(d.unit || (a.apartment||'').split(' | ')[0] || '').trim();
+  const u = String(d.unit || (a.apartment||'').split(' | ')[0] || '').trim();
+  // NY booking engine: "235S07 - 5R" at "235 Sullivan Street" is RMS unit "235 5R"
+  const ny = nyBookedRmsUnit(a);
+  return ny && (!u || u === nyBookedDashboardUnit(a)) ? ny : u;
+}
+// NY booking engine sends the street address (location) and the apartment (unit, e.g. "5R").
+// RMS names units "<building> <apartment>": 235 5R, 81 2FL; the two 308 buildings are 308W (Chelsea) and 308E (Midtown).
+function nyBookedRaw(a){
+  const own = a.raw_data || {};
+  if(own.location) return own;
+  const parent = a._parent_ref ? apps.find(x => x.ref_number === a._parent_ref) : null;
+  return (parent && parent.raw_data) || {};
+}
+function nyBookedDashboardUnit(a){
+  const raw = nyBookedRaw(a); const roomId = raw.room_id || '', unitNo = raw.unit || '';
+  return roomId && unitNo ? `${roomId} - ${unitNo}` : (roomId || unitNo);
+}
+function nyBookedRmsUnit(a){
+  if(!a || a._property !== 'newyork' || !/Booking Engine/.test(a._source||'')) return '';
+  const raw = nyBookedRaw(a);
+  const m = String(raw.location||'').trim().match(/^(\d+)\s+(?:(east|e\.?|west|w\.?)\s+)?/i);
+  const apt = String(raw.unit||'').trim().toUpperCase();
+  if(!m || !apt) return '';
+  let bldg = m[1];
+  if(bldg === '308'){ const dir = (m[2]||'').toLowerCase(); if(!dir) return ''; bldg += dir.startsWith('e') ? 'E' : 'W'; }
+  return `${bldg} ${apt}`;
 }
 const rmsNorm = v => String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 // Best single match for `unit` among RMS areas: exact first, then one that ends with it (e.g. "Soho 12B" ↔ "12B")
