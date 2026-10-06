@@ -3042,10 +3042,10 @@ async function scanPassport(source, ref, manual=false){
       }
     }
 
-    // Document type - fill if blank
+    // Document type - follows the document that was read (like the ID number and expiry)
     if(docType){
       const cached = editableCache[ref]||{};
-      if(!cached.id_type){
+      if(cached.id_type !== docType){
         updates.id_type = docType;
         const el = document.getElementById('t-idtype');
         if(el && selectedRef === ref) el.textContent = docType;
