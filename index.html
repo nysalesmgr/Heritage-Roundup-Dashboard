@@ -1066,6 +1066,7 @@ async function loadBostonApps(pre){
       const cached = editableCache[ref]||{};
       const updates = {};
       if(!cached.lead_source) updates.lead_source = r.source_override||'Booking Engine';
+      if(!cached.payment_plan && normalisePlan(r.payment_plan || raw.payment_plan)) updates.payment_plan = normalisePlan(r.payment_plan || raw.payment_plan);
       if(!cached.move_in && entry.start_date)   updates.move_in      = entry.start_date;
       if(!cached.move_out && entry.end_date)     updates.move_out     = entry.end_date;
       if(!cached.unit && (r.apartment || raw.unit)) updates.unit      = r.apartment || raw.unit;
@@ -1150,6 +1151,7 @@ async function loadNYApps(pre){
           updates.monthly_rent = formatMoney(String(r.monthly_rate).replace(/\.\d+$/,''));
         }
         if(!cached.lead_source)                    updates.lead_source  = 'NY Summer Booking Engine';
+        if(!cached.payment_plan && normalisePlan(r.payment_plan || raw.payment_plan)) updates.payment_plan = normalisePlan(r.payment_plan || raw.payment_plan);
         if(!cached.season)                         updates.season       = 'Summer';
         if(Object.keys(updates).length){
           editableCache[ref] = {...cached, ...updates};
@@ -2906,7 +2908,8 @@ function normalisePlan(v){
   if(!t) return '';
   if(t.includes('month')) return 'Monthly';
   if(t.includes('install') || /\b2\b|two/.test(t)) return '2 Installments';
-  if(t.includes('upfront') || t.includes('up front') || t.includes('full') || t.includes('one')) return 'Upfront';
+  // NY booking engine sends "single" for "Single Upfront Discounted Payment"
+  if(t.includes('upfront') || t.includes('up front') || t.includes('full') || t.includes('one') || t.includes('single') || t.includes('discount')) return 'Upfront';
   return '';
 }
 function getPaymentPlan(a){ return getNYData(a.ref_number).payment_plan || normalisePlan(a.payment_plan); }
