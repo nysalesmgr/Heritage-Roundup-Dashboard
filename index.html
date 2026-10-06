@@ -3027,6 +3027,8 @@ async function scanPassport(source, ref, manual=false){
     const docType = detectDocType(text, { ...extracted });
     if(!extracted.gender) extracted.gender = genderFromID(text);
     if(!extracted.first_name && !extracted.last_name){ const nm = nameFromID(text); extracted.first_name = nm.first_name; extracted.last_name = nm.last_name; }
+    // A US state licence / ID has no nationality on it: use the issuing country (United States) when blank
+    if(!extracted.nationality && docType !== 'Passport' && usStateOf(String(text).toUpperCase())) extracted.nationality = 'USA';
     if(!extracted.document_number || !extracted.expiry_date || !extracted.date_of_birth){
       const idd = idDetailsFromText(text);
       ['document_number','expiry_date','date_of_birth'].forEach(k=>{ if(!extracted[k] && idd[k]) extracted[k] = idd[k]; });
