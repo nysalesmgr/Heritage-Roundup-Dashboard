@@ -721,6 +721,15 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="toast"></div>
 
 <script>
+// ── ERROR CATCHER: anything that breaks on this page is listed in Run Diagnostics ──
+const pageErrors = [];
+(function(){
+  const add = msg => { msg = String(msg||'').slice(0,300); if(msg && !pageErrors.some(e=>e.msg===msg)){ pageErrors.push({ msg, at: new Date().toISOString() }); try{ updateDiagBadge(); }catch(e){} } };
+  window.addEventListener('error', e => add((e.message||'Error') + (e.filename ? '' : '')));
+  window.addEventListener('unhandledrejection', e => add('Unhandled: ' + (e.reason && e.reason.message || e.reason)));
+  const ce = console.error.bind(console);
+  console.error = (...a) => { add(a.map(x => x && x.message ? x.message : typeof x === 'string' ? x : '').filter(Boolean).join(' ')); ce(...a); };
+})();
 // ── CONFIG ──────────────────────────────────────────────
 const SUPABASE_URL = 'https://gldccgiydcbcgmbpgtnh.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsZGNjZ2l5ZGNiY2dtYnBndG5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzOTUxNzMsImV4cCI6MjA5Nzk3MTE3M30.Kfz2RPOp4S15hXvwPOfpMZPnmuIoA211a_YsmQDtSck';
@@ -972,6 +981,7 @@ async function loadApps(showMsg){
     if(showMsg) toast('Loaded ' + apps.length + ' applications ✓');
     updateDiagBadge();
     setTimeout(()=>autoScanNewApplications().then(updateDiagBadge), 1500);
+    setTimeout(diagReminder, 8000);
   } catch(e){
     console.error('loadApps error:', e);
     toast('Loading failed — click Refresh to try again');
@@ -2542,9 +2552,26 @@ function dataChecks(){
     && !rmsBookedApartments(a).length && !/^922\s/i.test(rmsDashboardUnit(a)));
   checks.push({ ok: !unknownUnit.length, label: 'Units match RMS', detail: unknownUnit.length ? `Unit name not in the Boston unit list: ${unknownUnit.map(a=>`${rmsDashboardUnit(a)} (${a.ref_number})`).join(', ')}` : 'Every booked unit maps to RMS' });
 
+  // Anything that broke on this page since it was opened
+  checks.push({ ok: !pageErrors.length, label: 'Errors on this page', detail: pageErrors.length
+    ? `${pageErrors.length} error(s) — please send these to Claude: ` + pageErrors.slice(-5).map(e=>e.msg).join(' • ')
+    : 'No errors since the page was opened' });
+
   // Running the latest version
   checks.push({ ok: !newVersionReady, label: 'Dashboard version', detail: newVersionReady ? 'A newer version is live — click Reload at the bottom of the screen' : 'Up to date' });
   return checks;
+}
+// Daily reminder (once a day per computer) to run the checks
+function diagReminder(){
+  let last = ''; try{ last = localStorage.getItem('diagLastRun') || ''; }catch(e){}
+  if(last === todayNY() || document.getElementById('diag-reminder')) return;
+  const bar = document.createElement('div');
+  bar.id = 'diag-reminder';
+  bar.style.cssText = 'position:fixed;right:18px;bottom:18px;background:#fff;border:1px solid var(--border);border-left:4px solid #b45309;padding:10px 14px;border-radius:8px;font-size:13px;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.15);display:flex;gap:10px;align-items:center;font-family:Inter,sans-serif;max-width:340px';
+  bar.innerHTML = '<span>🔍 Daily check: run diagnostics to catch bugs and data problems.</span><button style="background:var(--navy);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap">Run now</button><span style="cursor:pointer;color:var(--t3)" title="Remind me later">✕</span>';
+  bar.querySelector('button').onclick = () => { bar.remove(); runDiagnostics(); };
+  bar.querySelectorAll('span')[1].onclick = () => bar.remove();
+  document.body.appendChild(bar);
 }
 function updateDiagBadge(){
   const el = document.getElementById('diag-badge');
@@ -2625,6 +2652,8 @@ async function runDiagnostics(){
   await checkForNewVersion();
   checks.push(...dataChecks());
   updateDiagBadge();
+  try{ localStorage.setItem('diagLastRun', todayNY()); }catch(e){}
+  document.getElementById('diag-reminder')?.remove();
 
   // Render results
   const html = checks.map(c=>`
