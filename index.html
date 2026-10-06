@@ -3166,6 +3166,26 @@ async function rmsIdTypeId(client, idType){
   const hit = list.find(t => rmsNorm(t.description) === n || rmsNorm(t.shortDescription) === n);
   return hit ? hit.id : 0;
 }
+// "Secondary Guest ID Type" on the RMS guest screen is the Res Type list (resTypeId), relabelled ID Card / Passport / …
+async function rmsSecondaryIdTypeId(client, idType){
+  const norm = v => rmsNorm(v).replace('licence','license');
+  const n = norm(idType); if(!n) return 0;
+  const list = await rmsLookup(client, '/reservationTypes');
+  const hit = list.find(t => [t.name, t.description, t.shortDescription].some(x => x && norm(x) === n));
+  return hit ? hit.id : 0;
+}
+// Put the second person's ID on the first person's RMS guest profile (Secondary Guest ID Type / Licence Number / Expiry)
+async function rmsSetSecondaryId(client, guestId, other){
+  if(!guestId || !other) return;
+  const od = getNYData(other.ref_number);
+  const changes = {};
+  const num = od.passport_number || other.passport_number;
+  if(num) changes.licenceNumber = String(num).trim();
+  const exp = rmsISODate(od.passport_expiry || other.passport_expiry || '');
+  if(exp) changes.licenceExpiryDate = exp + ' 23:59:00';
+  try{ const t = await rmsSecondaryIdTypeId(client, idTypeOf(other)); if(t) changes.resTypeId = t; }catch(e){ console.warn('ID type lookup failed:', e.message); }
+  if(!(await rmsUpdate(client, 'guests', guestId, changes))) toast('⚠️ Could not save the second person\'s ID on the guest profile — add it in RMS');
+}
 // Mobile in the format RMS saves itself: "+573166209800" (country code kept, spaces/brackets removed)
 function rmsMobile(phone){
   let p = String(phone||'').trim();
@@ -3760,6 +3780,13 @@ async function rmsCreateReservation(){
         if(la){ other = await rmsSearchOrCreateGuest(rmsClient, la, idTypeOf(la)); setNYData(la.ref_number, { reservation_no: String(resId) }); }
       }
       if(other) await rmsCall(`/reservations/${docRes}/addGuest?guestId=${parseInt(other)}`, 'PUT', {}, rmsClient);
+      // The L booking's main guest carries the other person's ID details
+      if(other){
+        const lGuest = (second && resId2 && docRes !== resId) ? g2 : guestId;
+        const otherApp = (second && resId2) ? (docRes === resId ? second.la : a)
+          : getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r)).find(x => x && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(rmsDashboardUnit(a)));
+        await rmsSetSecondaryId(rmsClient, lGuest, otherApp);
+      }
     }catch(e){ console.warn('Add secondary guest failed:', e.message); toast('⚠️ Booking created, but the second guest could not be added — add them in RMS'); }
     toast(resId2
       ? `✓ Bookings ${resId} (main) and ${resId2} created — ${n1+n2} document(s) uploaded`

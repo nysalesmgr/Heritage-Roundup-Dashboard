@@ -48,11 +48,12 @@ const ALLOW: Array<[string, RegExp]> = [
   ["POST", /^\/reservations\/\d+\/document$/],
   ["PUT", /^\/reservations\/\d+\/addGuest\?guestId=\d+$/],   // secondary guest on a booking
   // Read-only lookup lists used to match names to RMS ids
-  ["GET", /^\/(rates|bookingSources|countries|idTypes|companies|mandatoryFields)$/],
+  ["GET", /^\/(rates|bookingSources|countries|idTypes|companies|mandatoryFields|reservationTypes)$/],
 ];
 
 // Fields the dashboard may write, per call. Anything else in the body is dropped.
-const GUEST_FIELDS = ["guestGiven","guestSurname","email","mobile","gender","birthday","passportId","passportExpiry","userDefined15","nationalityId","idTypeId"];
+const GUEST_FIELDS = ["guestGiven","guestSurname","email","mobile","gender","birthday","passportId","passportExpiry","userDefined15","nationalityId","idTypeId",
+  "licenceNumber","licenceExpiryDate","resTypeId"];   // last three = Secondary Guest ID number / expiry / type
 const BODY_FIELDS: Array<[string, RegExp, string[]]> = [
   ["POST",  /^\/guests$/, GUEST_FIELDS],
   ["PATCH", /^\/guests\/\d+$/, GUEST_FIELDS.filter(f => !["guestGiven","guestSurname","email"].includes(f))],
