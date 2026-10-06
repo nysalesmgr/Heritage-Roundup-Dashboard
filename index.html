@@ -1000,7 +1000,7 @@ function secondLicensee(main, o){
   const row = {
     ref_number: ref, id: ref, _parent_ref: String(main.ref_number||main.id),
     created_at: main.created_at, submitted_at: main.submitted_at,
-    first_name: o.first_name||'', last_name: o.last_name||'', email: o.email||'', phone: o.phone||'',
+    first_name: cached.first_name || o.first_name||'', last_name: cached.last_name || o.last_name||'', email: o.email||'', phone: o.phone||'',
     college: o.college||'', address: o.address||'',
     apartment: main.apartment, bedroom_choice: main.bedroom_choice, viewing_preference: main.viewing_preference,
     start_date: main.start_date, end_date: main.end_date, payment_plan: main.payment_plan,
@@ -1795,7 +1795,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','first_name','last_name','updated_at'];
   // Send only the fields that changed (so one person's save can't undo another's), and keep the
   // record's own property even if the view was switched while this save was pending
   const prop = (apps.find(x=>x.ref_number===ref)||{})._property || before.property || currentProperty;
@@ -2331,9 +2331,11 @@ function switchTab(name){
 // Update a booking-engine row's status and confirm the database actually changed it.
 // Supabase returns success even when row-level security silently blocks an update,
 // so we ask for the updated rows back and treat "0 rows" as a failure.
+// Which database row a dashboard ref points at: NY booking engine rows have no ref_number, so their id is used
+function rowFilter(ref){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(ref)) ? `id=eq.${ref}` : `ref_number=eq.${encodeURIComponent(ref)}`; }
 async function patchStatusRow(table, ref, newStatus){
   try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(ref)}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${rowFilter(ref)}`, {
       method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
       body: JSON.stringify({ status: newStatus })
     });
@@ -2860,6 +2862,18 @@ function idDetailsFromText(text){
   }
   return usLicenceFallback(T, out);
 }
+// Name on a US licence / ID: "LN SMITH" + "FN JOHN", "1 SMITH" + "2 JOHN", or surname and given names
+// on the two lines above the street address ("HAJARNAVIS" / "SIMRAN H" / "29 TALL TIMBER DR")
+function nameFromID(text){
+  const lines = String(text||'').toUpperCase().split('\n').map(l=>l.trim()).filter(Boolean);
+  const lab = re => { const l = lines.find(x => re.test(x)); return l ? l.replace(re,'').trim() : ''; };
+  let last = lab(/^(?:LN|1)\s+(?=[A-Z])/), first = lab(/^(?:FN|2)\s+(?=[A-Z])/);
+  if(last && first) return { last_name: last, first_name: first };
+  const isName = l => /^[A-Z][A-Z' .-]{1,40}$/.test(l) && !/\b(LICENSE|LICENCE|DRIVER|CLASS|NONE|REAL|PURPOSES|STATE|USA|COMMISSION|MVC|DMV|CARD|IDENTIFICATION|CHIEF|ADMINISTRATOR|RESTR|END|ORGAN|DONOR|VETERAN|NOT|FOR|FEDERAL|MOTOR|VEHICLE|DEPARTMENT)\b/.test(l);
+  const ai = lines.findIndex(l => /^\d{1,6}\s+[A-Z0-9].*\b(ST|STREET|AVE|AVENUE|RD|ROAD|DR|DRIVE|LN|LANE|BLVD|CT|COURT|PL|PLACE|WAY|TER|TERRACE|HWY|APT|UNIT|CIR|PKWY)\b/.test(l));
+  if(ai >= 2 && isName(lines[ai-2]) && isName(lines[ai-1])) return { last_name: lines[ai-2], first_name: lines[ai-1] };
+  return { last_name: '', first_name: '' };
+}
 // Driver licence / ID card: "SEX F", "Sex: M", "15 SEX M" …
 function genderFromID(text){
   const m = String(text||'').toUpperCase().match(/\b(?:SEX|GENDER)\s*[:.]?\s*(?:\d{1,2}\s*)?([MF])\b/);
@@ -2938,7 +2952,12 @@ function editPanelField(elId, field, el){
     const display = val ? (isDate ? fmtDate(val) : field==='email' ? `<a href="mailto:${esc(val)}">${esc(val)}</a>` : esc(val)) : '—';
     el.innerHTML = display;
     const table = a._table || 'formsite_submissions';
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?ref_number=eq.${encodeURIComponent(selectedRef)}`, {
+    if(a._parent_ref && (field === 'first_name' || field === 'last_name')){
+      setNYData(selectedRef, { [field]: val });
+      await insertHistory(selectedRef, 'field', `✏️ ${field}: "${cur}" → "${val}"`);
+      toast(`${field.replace(/_/g,' ')} updated ✓`); return;
+    }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${rowFilter(selectedRef)}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=representation'},
       body: JSON.stringify({[field]: val})
     });
@@ -3007,6 +3026,7 @@ async function scanPassport(source, ref, manual=false){
     const extracted = parsePassportMRZ(text);
     const docType = detectDocType(text, { ...extracted });
     if(!extracted.gender) extracted.gender = genderFromID(text);
+    if(!extracted.first_name && !extracted.last_name){ const nm = nameFromID(text); extracted.first_name = nm.first_name; extracted.last_name = nm.last_name; }
     if(!extracted.document_number || !extracted.expiry_date || !extracted.date_of_birth){
       const idd = idDetailsFromText(text);
       ['document_number','expiry_date','date_of_birth'].forEach(k=>{ if(!extracted[k] && idd[k]) extracted[k] = idd[k]; });
@@ -3197,8 +3217,12 @@ async function acceptScanValue(ref, field, value, btn){
   if(!a) return;
   if(field === 'First Name' || field === 'Last Name') value = nameCase(value);
   const col = field === 'First Name' ? 'first_name' : field === 'Last Name' ? 'last_name' : '';
-  if(col){
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${a._table||'formsite_submissions'}?ref_number=eq.${encodeURIComponent(ref)}`, {
+  if(col && a._parent_ref){
+    // Second person on a booking engine form has no row of their own: their name is kept with the dashboard data
+    setNYData(ref, { [col]: value });
+    insertHistory(ref, 'field', `✏️ ${field}: "${a[col]||'(blank)'}" → "${value}" (from document)`);
+  } else if(col){
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${a._table||'formsite_submissions'}?${rowFilter(ref)}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=representation'}, body: JSON.stringify({[col]: value})
     });
     let ok=false; try{ ok = res.ok && (await res.json()).length>0; }catch(e){}
