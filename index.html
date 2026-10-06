@@ -3413,9 +3413,16 @@ async function rmsLoadAreas(){
     // Pre-select the dashboard's unit if it's free
     const unit = rmsDashboardUnit(a);
     const match = unit ? rmsMatchArea(areas, unit) : null;
+    const booked = match ? null : rmsPickBookedArea(a, areas);
     if(match){
       areaSel.value = String(match.id);
       rmsUnitHint(`✓ Matched dashboard unit "${unit}" — available for these dates.`, '#15803d');
+    } else if(booked && booked.area){
+      areaSel.value = String(booked.area.id);
+      const la = booked.partner ? apps.find(x=>x.ref_number===getLinkedRefs(a.ref_number)[0]) : null;
+      rmsUnitHint(`✓ Booked "${rmsBookedRoomText(a)}" → ${booked.area.name}` + (la ? ` · ${la.first_name||''} ${la.last_name||''} → ${booked.partner.name} (second booking)` : '') + ' — free for these dates.', '#15803d');
+    } else if(booked){
+      rmsUnitHint(`⚠️ Booked "${rmsBookedRoomText(a)}" (${booked.apt}) — none free for these dates. Pick a unit.`, '#b45309');
     } else if(unit){
       const anyMatch = rmsMatchArea(await rmsAllAreas(client, propId).catch(()=>[]), unit);
       rmsUnitHint(anyMatch
@@ -3429,6 +3436,38 @@ async function rmsLoadAreas(){
     areaSel.innerHTML = '<option value="">Could not check availability</option>';
     errEl.textContent = 'Could not check availability: ' + e.message;
   }
+}
+// Boston booking engine apartment names → RMS apartments (from Boston_Unit_Mapping, 2026-10-06).
+// The website sells a "line" (e.g. Two Bedroom - 01); RMS has it on several floors (201, 301, 401).
+// Two-bedroom apartments are booked per room in RMS: <apt>L and <apt>R.
+const BE_UNIT_MAP = {
+  'one bedroom 02': ['922 102','922 202','922 302','922 402'],
+  'one bedroom 03': ['922 103','922 203','922 303','922 403'],
+  'one bedroom 04': ['922 104','922 204','922 304','922 404'],
+  'two bedroom 01': ['922 201','922 301','922 401'],
+  'two bedroom 05': ['922 105','922 205','922 305','922 405'],
+  'two bedroom 06': ['922 106','922 206','922 306','922 406'],
+  'two bedroom 07': ['922 107','922 207','922 307','922 407'],
+};
+const beUnitKey = v => String(v||'').toLowerCase().replace(/[—–-]/g,' ').replace(/\s+/g,' ').trim();
+// RMS apartments that match what was booked (lowest floor first), or [] when the name isn't in the map
+function rmsBookedApartments(a){ return BE_UNIT_MAP[beUnitKey(rmsBookedRoomText(a))] || []; }
+// Pick a free RMS unit for the booked apartment. Two-bedroom: an apartment with both rooms free when two
+// people share it; the first licensee gets L, the second (<ref>-2) gets R.
+function rmsPickBookedArea(a, free){
+  const apts = rmsBookedApartments(a);
+  if(!apts.length) return null;
+  const byName = n => free.find(x => rmsNorm(x.name) === rmsNorm(n));
+  const pair = getLinkedRefs(a.ref_number).some(r => { const la = apps.find(x=>x.ref_number===r); return la && rmsNorm(rmsDashboardUnit(la)) === rmsNorm(rmsDashboardUnit(a)); });
+  const second = !!a._parent_ref;
+  for(const apt of apts){
+    const whole = byName(apt);
+    if(whole) return { area: whole, apt };
+    const L = byName(apt+'L'), R = byName(apt+'R');
+    if(pair){ if(L && R) return { area: second ? R : L, partner: second ? L : R, apt }; continue; }
+    if(L || R) return { area: (second ? (R||L) : (L||R)), apt };
+  }
+  return { area: null, apt: apts.join(', ') };
 }
 // What the applicant booked, in words (booking engine apartment / bedroom fields, then the dashboard unit)
 function rmsBookedRoomText(a){
@@ -3613,6 +3652,21 @@ async function rmsCreateReservation(){
 
   try {
     if(!d.season) throw new Error('Season is required by RMS — set the Season on the dashboard first.');
+
+    // Two people on one booking engine form, booked into a two-bedroom: each gets their own room (L / R)
+    const areaName = document.getElementById('rms-area').selectedOptions[0]?.textContent || '';
+    const roomSide = areaName.trim().match(/^(.*\d)([LR])$/i);
+    if(roomSide){
+      for(const r of getLinkedRefs(a.ref_number)){
+        const la = apps.find(x=>x.ref_number===r);
+        if(la && rmsNorm(rmsDashboardUnit(la)) === rmsNorm(rmsDashboardUnit(a))){
+          const other = roomSide[1] + (roomSide[2].toUpperCase()==='L' ? 'R' : 'L');
+          setNYData(la.ref_number, { unit: other });
+          setNYData(a.ref_number, { unit: areaName.trim() });
+          break;
+        }
+      }
+    }
 
     // Linked applicant in a different unit → a second booking (checked before anything is created)
     const second = await rmsSecondBooking(rmsClient, propId, a, areaId);
