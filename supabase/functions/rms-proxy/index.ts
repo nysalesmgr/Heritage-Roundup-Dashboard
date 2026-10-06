@@ -5,7 +5,7 @@
 // Supports several RMS accounts (one per property / client ID).
 //
 // Required secrets (supabase secrets set ...):
-//   RMS_BASE_URL     e.g. https://restapi12.rmscloud.com
+//   RMS_BASE_URL     e.g. https://restapi13.rmscloud.com
 //   RMS_AGENT_ID     agent ID issued by RMS
 //   RMS_AGENT_PWD    agent password issued by RMS
 //   RMS_CLIENTS      JSON list, one entry per RMS account:
@@ -135,7 +135,9 @@ Deno.serve(async (req) => {
       fetch(`${base}${path}`, { method, headers: { "Content-Type": "application/json", authtoken: t }, body });
     let res = await send(await getToken(client));
     if (res.status === 401) res = await send(await getToken(client, true)); // token expired — refresh once
-    return new Response(await res.text(), { status: res.status, headers });
+    // 204/205/304 must not carry a body
+    const text = [204, 205, 304].includes(res.status) ? null : await res.text();
+    return new Response(text, { status: res.status, headers });
   } catch (e) {
     return json(502, { error: (e as Error).message });
   }

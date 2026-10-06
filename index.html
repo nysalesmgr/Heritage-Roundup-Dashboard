@@ -940,31 +940,49 @@ function switchProperty(p){
 }
 
 // ── LOAD APPS ─────────────────────────────────────────────
+let reloadPending = false;
+// Supabase read with a time limit, so one stuck request can't freeze loading
+function sbGet(path, ms=20000){
+  const ctl = new AbortController();
+  const t = setTimeout(()=>ctl.abort(), ms);
+  return fetch(SUPABASE_URL + path, { headers: SB_HEADERS, signal: ctl.signal }).finally(()=>clearTimeout(t));
+}
 async function loadApps(showMsg){
-  if(isLoading) return;
+  // A load is already running: run again as soon as it finishes (e.g. property switched mid-load)
+  if(isLoading){ reloadPending = true; return; }
   isLoading = true;
+  reloadPending = false;
+  const prop = currentProperty;
   if(showMsg) toast('Refreshing…');
-  apps = [];
   try{
-    // Load support data in parallel
+    // Start every request at once; applications are processed after the support data arrives
+    const pre = prop === 'boston'
+      ? { be: sbGet('/rest/v1/applications?select=*&order=created_at.desc'),
+          fs: sbGet('/rest/v1/formsite_submissions?source=like.Boston*&order=created_at.desc') }
+      : { fs: sbGet('/rest/v1/formsite_submissions?source=like.NY*&order=created_at.desc'),
+          be: sbGet('/rest/v1/ny_summer_booking_engine?select=*&order=created_at.desc') };
+    Object.values(pre).forEach(p=>p.catch(()=>{})); // handled below
     await Promise.all([loadEditableData(), loadRenewals(), loadBlacklist(), loadLinkedReservations()]);
-    // Load apps for current property
-    if(currentProperty === 'boston'){
-      await loadBostonApps();
-    } else {
-      await loadNYApps();
-    }
+    if(prop !== currentProperty){ reloadPending = true; return; }
+    apps = [];
+    if(prop === 'boston') await loadBostonApps(pre);
+    else await loadNYApps(pre);
+    if(prop !== currentProperty){ reloadPending = true; return; }
     refreshAll();
     if(showMsg) toast('Loaded ' + apps.length + ' applications ✓');
+  } catch(e){
+    console.error('loadApps error:', e);
+    toast('Loading failed — click Refresh to try again');
   } finally {
     isLoading = false;
+    if(reloadPending && document.getElementById('app').classList.contains('ready')) loadApps(false);
   }
 }
 
 // BOSTON: Supabase booking engine + Formsite via Supabase
-async function loadBostonApps(){
+async function loadBostonApps(pre){
   try {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/applications?select=*&order=created_at.desc', { headers: SB_HEADERS });
+    const res = await pre.be;
     if(res.ok){ const rows=await res.json(); rows.forEach(r=>{
       const raw = r.raw_data || {};
       // Parse occupants_details for documents
@@ -1000,7 +1018,7 @@ async function loadBostonApps(){
         const moveOut = entry.end_date   || '';
         if(moveIn && moveOut){
           const months = calcMonths(moveIn, moveOut);
-          updates.season = months < 10 ? '9 months' : '12 months';
+          if(months > 0) updates.season = months < 10 ? '9 months' : '12 months';
         }
       }
       if(Object.keys(updates).length){
@@ -1011,7 +1029,7 @@ async function loadBostonApps(){
   } catch(e){ console.error('Supabase error:', e); }
 
   try {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/formsite_submissions?source=like.Boston*&order=created_at.desc', { headers: SB_HEADERS });
+    const res = await pre.fs;
     if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push(normalizeSupabaseFormsite(r))); }
   } catch(e){ console.error('Boston Formsite error:', e); }
 
@@ -1019,14 +1037,14 @@ async function loadBostonApps(){
 }
 
 // NEW YORK: Formsite via Supabase + NY Booking Engine
-async function loadNYApps(){
+async function loadNYApps(pre){
   try {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/formsite_submissions?source=like.NY*&order=created_at.desc', { headers: SB_HEADERS });
+    const res = await pre.fs;
     if(res.ok){ const rows=await res.json(); rows.forEach(r=>apps.push(normalizeSupabaseFormsite(r))); }
   } catch(e){ console.error('NY Formsite error:', e); }
 
   try {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/ny_summer_booking_engine?select=*&order=created_at.desc', { headers: SB_HEADERS });
+    const res = await pre.be;
     if(res.ok){
       const rows = await res.json();
       rows.forEach(r=>{
@@ -1254,7 +1272,7 @@ let renewalRows = [];
 
 async function loadRenewals(){
   try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/renewals?property=eq.${currentProperty}&order=created_at.asc`, { headers: SB_HEADERS });
+    const res = await sbGet(`/rest/v1/renewals?property=eq.${currentProperty}&order=created_at.asc`);
     if(res.ok) renewalRows = await res.json();
   }catch(e){ console.warn('Renewals load error:', e); }
 }
@@ -1383,7 +1401,7 @@ let blacklistNames = [];
 
 async function loadBlacklist(){
   try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/blacklist?property=eq.${currentProperty}&order=created_at.desc`, { headers: SB_HEADERS });
+    const res = await sbGet(`/rest/v1/blacklist?property=eq.${currentProperty}&order=created_at.desc`);
     if(res.ok) blacklistNames = await res.json();
   }catch(e){ console.warn('Blacklist load error:', e); }
 }
@@ -1494,7 +1512,7 @@ async function saveBlacklistEntry(){
 async function deleteBlacklistEntry(id){
   if(!confirm('Remove from blacklist?')) return;
   await fetch(`${SUPABASE_URL}/rest/v1/blacklist?id=eq.${id}`, { method:'DELETE', headers: SB_HEADERS });
-  blacklistNames = blacklistNames.filter(b=>b.id!==id);
+  blacklistNames = blacklistNames.filter(b=>String(b.id)!==String(id));
   renderBlacklistPage();
   renderTable();
   toast('Removed from blacklist');
@@ -1615,8 +1633,8 @@ function openAddRenewal(){
   document.getElementById('rn-movein').value='';
   document.getElementById('rn-moveout').value='';
   document.getElementById('rn-rate').value='';
-  document.getElementById('rn-agr').value='';
-  document.getElementById('rn-pay').value='';
+  document.getElementById('rn-agr').value=today;
+  document.getElementById('rn-pay').value=due;
   document.getElementById('rn-remarks').value='';
   document.getElementById('renewal-modal').style.display='flex';
 }
@@ -1629,11 +1647,11 @@ async function saveNewRenewal(){
     last_name:      document.getElementById('rn-last').value.trim(),
     reservation_no: document.getElementById('rn-res').value.trim(),
     unit:           document.getElementById('rn-unit').value.trim(),
-    move_in:        document.getElementById('rn-movein').value,
-    move_out:       document.getElementById('rn-moveout').value,
+    move_in:        document.getElementById('rn-movein').value || null,
+    move_out:       document.getElementById('rn-moveout').value || null,
     monthly_rate:   formatMoney(document.getElementById('rn-rate').value) || null,
-    agr_date:       document.getElementById('rn-agr').value,
-    payment_due:    document.getElementById('rn-pay').value,
+    agr_date:       document.getElementById('rn-agr').value || null,
+    payment_due:    document.getElementById('rn-pay').value || null,
     remarks:        document.getElementById('rn-remarks').value.trim(),
   };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/renewals`, {
@@ -1742,7 +1760,7 @@ function setNYData(ref, data){
 
 async function loadEditableData(){
   try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/editable_data?select=*`, { headers: SB_HEADERS });
+    const res = await sbGet('/rest/v1/editable_data?select=*');
     if(res.ok){ 
       const rows=await res.json(); 
       editableCache={}; 
@@ -1769,7 +1787,7 @@ function editCell(td, ref, field, type){
   } else {
     input = document.createElement('input');
     input.type = type==='date' ? 'date' : 'text';
-    input.value = cur;
+    input.value = type==='date' ? rmsISODate(cur) : cur;
     input.placeholder = type==='date' ? 'YYYY-MM-DD' : 'Enter…';
   }
 
@@ -1779,6 +1797,7 @@ function editCell(td, ref, field, type){
 
   const save = () => {
     const val = field==='monthly_rent' ? formatMoney(input.value) : field==='incentives' ? formatPercent(input.value) : input.value;
+    if(type==='date' && val === rmsISODate(cur)){ renderTable(); return; } // unchanged date: keep the stored value
     setNYData(ref,{[field]:val});
     // For season field, apply colour immediately
     if(field==='season'){
@@ -1874,10 +1893,17 @@ function addMultiDate(ref, field, fromTable=false){
 
 function updateMultiDate(ref, field, idx, val){
   const dates = getMultiDates(ref, field);
-  dates[idx] = val;
+  if(val) dates[idx] = val; else dates.splice(idx, 1); // a cleared date is removed
   saveMultiDates(ref, field, dates);
   renderTable();
   if(selectedRef === ref) renderPanelViewingDates(ref);
+  reopenMultiDateEditors(ref, field);
+}
+// Editors still open on pages that renderTable() doesn't redraw (Drop / Completed) get fresh positions
+function reopenMultiDateEditors(ref, field){
+  document.querySelectorAll('td[data-md]').forEach(c=>{
+    if(c.dataset.md === ref+'|'+field && c.querySelector('input')) openMultiDateEditor(ref, field, c);
+  });
 }
 
 function deleteMultiDate(ref, field, idx){
@@ -1886,6 +1912,7 @@ function deleteMultiDate(ref, field, idx){
   saveMultiDates(ref, field, dates);
   renderTable();
   if(selectedRef === ref) renderPanelViewingDates(ref);
+  reopenMultiDateEditors(ref, field);
   toast((field==='vmu'?'VMU':'IPT') + ' date removed');
 }
 
@@ -2034,6 +2061,7 @@ function openPanel(ref){
   const a = apps.find(x=>x.ref_number===ref);
   if(!a) return;
   selectedRef = ref;
+  document.getElementById('scan-discrepancy-banner')?.remove(); // belongs to the previous applicant
   const isNY = a._property === 'newyork' || a._source === 'Domestic' || a._source === 'International';
   const isBookingEngine = a._source === 'Booking Engine' || a._source === 'Boston Booking Engine' || a._source === 'NY Summer Booking Engine';
 
@@ -2099,8 +2127,8 @@ function openPanel(ref){
     document.getElementById('t-course').textContent   = a.course||'—';
     document.getElementById('t-referral').textContent = a.referral||'—';
     document.getElementById('t-passport-num').textContent = a.passport_number||'—';
-    document.getElementById('t-passport-exp').textContent = a.passport_expiry ? fmtDate(a.passport_expiry) : '—';
-    document.getElementById('t-dob').textContent = getNYData(a.ref_number).dob ? fmtDate(getNYData(a.ref_number).dob) : '—';
+    document.getElementById('t-passport-exp').textContent = a.passport_expiry ? fmtDatePlain(a.passport_expiry) : '—';
+    document.getElementById('t-dob').textContent = getNYData(a.ref_number).dob ? fmtDatePlain(getNYData(a.ref_number).dob) : '—';
     document.getElementById('t-nationality').textContent = getNYData(a.ref_number).nationality || '—';
     document.getElementById('t-gender').textContent = getNYData(a.ref_number).gender || '—';
     document.getElementById('t-idtype').textContent = getNYData(a.ref_number).id_type || '—';
@@ -2110,13 +2138,13 @@ function openPanel(ref){
   const d = getNYData(a.ref_number);
   if(isBookingEngine){
     document.getElementById('t-apt').textContent      = a.apartment||'—';
-    document.getElementById('t-movein').textContent   = fmtDate(a.start_date);
-    document.getElementById('t-moveout').textContent  = fmtDate(a.end_date);
+    document.getElementById('t-movein').textContent   = fmtDatePlain(a.start_date);
+    document.getElementById('t-moveout').textContent  = fmtDatePlain(a.end_date);
     document.getElementById('t-rate').textContent     = a.monthly_rate||'—';
   } else {
     document.getElementById('t-apt').textContent      = d.unit||'—';
-    document.getElementById('t-movein').textContent   = d.move_in ? fmtDate(d.move_in) : '—';
-    document.getElementById('t-moveout').textContent  = d.move_out ? fmtDate(d.move_out) : '—';
+    document.getElementById('t-movein').textContent   = d.move_in ? fmtDatePlain(d.move_in) : '—';
+    document.getElementById('t-moveout').textContent  = d.move_out ? fmtDatePlain(d.move_out) : '—';
     document.getElementById('t-rate').textContent     = d.monthly_rent||'—';
   }
   // RMS reservation number (set by Create in RMS Cloud; editable)
@@ -2296,7 +2324,7 @@ async function setStatus(ref, newStatus){
 
 async function loadLinkedReservations(){
   try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/linked_reservations?select=*`, { headers: SB_HEADERS });
+    const res = await sbGet('/rest/v1/linked_reservations?select=*');
     if(res.ok) linkedReservations = await res.json();
   }catch(e){ console.warn('Linked reservations load error:', e); }
 }
@@ -2582,15 +2610,18 @@ function editPaymentPlan(el){
 }
 
 function editPanelFieldEditable(elId, field, el, type){
+  if(el.querySelector('input')) return; // already editing
   const cur = getNYData(selectedRef)[field] || '';
   const input = document.createElement('input');
   input.type = type==='date' ? 'date' : 'text';
-  input.value = cur;
+  input.value = type==='date' ? rmsISODate(cur) : cur;
+  input.onclick = e => e.stopPropagation();
   input.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
   el.innerHTML=''; el.appendChild(input); input.focus();
   const save = () => {
     const val = input.value.trim();
     el.innerHTML = val ? (type==='date' ? fmtDate(val) : esc(val)) : '—';
+    if(val === (type==='date' ? rmsISODate(cur) : cur)) return; // nothing changed
     setNYData(selectedRef, {[field]: val});
     toast(`${field} updated ✓`);
   };
@@ -2599,17 +2630,20 @@ function editPanelFieldEditable(elId, field, el, type){
 }
 
 function editPanelField(elId, field, el){
+  if(el.querySelector('input')) return; // already editing
   const a = apps.find(x=>x.ref_number===selectedRef);
   if(!a) return;
   const cur = a[field]||'';
   const isDate = field==='date_of_birth' || field==='expiry_date';
   const input = document.createElement('input');
   input.type = isDate ? 'date' : 'text';
-  input.value = cur;
+  input.value = isDate ? rmsISODate(cur) : cur;
+  input.onclick = e => e.stopPropagation();
   input.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
   el.innerHTML=''; el.appendChild(input); input.focus();
   const save = async () => {
     const val = input.value.trim();
+    if(val === (isDate ? rmsISODate(cur) : cur)){ el.innerHTML = cur ? (isDate ? fmtDate(cur) : esc(cur)) : '—'; return; }
     a[field] = val;
     const display = val ? (isDate ? fmtDate(val) : field==='email' ? `<a href="mailto:${esc(val)}">${esc(val)}</a>` : esc(val)) : '—';
     el.innerHTML = display;
@@ -2674,7 +2708,7 @@ async function scanPassport(source, ref, manual=false){
       if(!cached.dob){
         updates.dob = extracted.date_of_birth;
         const el = document.getElementById('t-dob');
-        if(el && selectedRef === ref) el.textContent = fmtDate(extracted.date_of_birth);
+        if(el && selectedRef === ref) el.textContent = fmtDatePlain(extracted.date_of_birth);
       }
     }
 
@@ -2718,8 +2752,8 @@ async function scanPassport(source, ref, manual=false){
     if(extracted.document_number && a.passport_number && extracted.document_number !== a.passport_number){
       discrepancies.push({ field: 'Passport Number', form: a.passport_number, scan: extracted.document_number });
     }
-    if(extracted.expiry_date && a.passport_expiry && extracted.expiry_date !== a.passport_expiry){
-      discrepancies.push({ field: 'Passport Expiry', form: fmtDate(a.passport_expiry), scan: fmtDate(extracted.expiry_date) });
+    if(extracted.expiry_date && a.passport_expiry && extracted.expiry_date !== rmsISODate(a.passport_expiry)){
+      discrepancies.push({ field: 'Passport Expiry', form: fmtDatePlain(a.passport_expiry), scan: fmtDatePlain(extracted.expiry_date) });
     }
 
     // Save updates
@@ -2792,6 +2826,7 @@ function countryFromMRZ(code){
 function showScanDiscrepancies(discrepancies, ref, extracted){
   const existing = document.getElementById('scan-discrepancy-banner');
   if(existing) existing.remove();
+  if(selectedRef !== ref) return; // the user has moved on to another applicant
 
   const banner = document.createElement('div');
   banner.id = 'scan-discrepancy-banner';
@@ -3433,8 +3468,15 @@ function closeRmsModal(){
 // ── EXPORT CSV ────────────────────────────────────────────
 function exportCSV(){
   const prop = currentProperty === 'boston' ? 'Boston' : 'NewYork';
-  const h = ['Reference','First Name','Last Name','Email','Phone','College','Apartment','Start Date','End Date','Payment Plan','Monthly Rate','Status','Source','Submitted'];
-  const rows = apps.map(a=>[a.ref_number,a.first_name,a.last_name,a.email,a.phone,a.college,a.apartment,a.start_date,a.end_date,a.payment_plan,a.monthly_rate,a.status,a._source,a.created_at].map(v=>{ let t=(v||'').toString(); if(/^[=+\-@\t\r]/.test(t)) t="'"+t; return '"'+t.replace(/"/g,'""')+'"'; }));
+  const h = ['Reference','First Name','Last Name','Email','Phone','College','Unit','Move In','Move Out','Payment Plan','Monthly Rent','Season','Commission %','RMS Res No','Status','Source','Submitted'];
+  const rows = apps.map(a=>{
+    const d = getNYData(a.ref_number);
+    return [a.ref_number,a.first_name,a.last_name,a.email,a.phone,a.college,
+      d.unit||a.apartment, d.move_in||a.start_date||a.formsite_movein, d.move_out||a.end_date||a.formsite_moveout,
+      d.payment_plan||a.payment_plan, d.monthly_rent||a.monthly_rate, d.season, d.incentives, d.reservation_no,
+      a.status,a._source,a.created_at
+    ].map(v=>{ let t=(v||'').toString(); if(/^[=+\-@\t\r]/.test(t)) t="'"+t; return '"'+t.replace(/"/g,'""')+'"'; });
+  });
   const csv = [h.join(','),...rows.map(r=>r.join(','))].join('\n');
   const blob = new Blob([csv],{type:'text/csv'});
   const url  = URL.createObjectURL(blob);
@@ -3500,20 +3542,25 @@ function addDaysISO(iso, n){
 function toNYDate(d){
   const v = String(d||'').trim();
   if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); // MM/DD/YYYY as typed in the forms
+  if(us) return `${us[3]}-${us[1].padStart(2,'0')}-${us[2].padStart(2,'0')}`;
   const hasZone = hasTZ(v);
   if(!hasZone && /^\d{4}-\d{2}-\d{2}[ T]/.test(v)) return v.slice(0,10);
   const date = new Date(v);
   return isNaN(date.getTime()) ? '' : nyDateISO(date);
 }
-function fmtDate(d){
+// Date as DD-MM-YYYY for plain text (textContent); unreadable values come back as written
+function fmtDatePlain(d){
   if(!d||d==='—') return '—';
   try{
     const iso = toNYDate(d);
-    if(!iso) return esc(d);
+    if(!iso) return String(d);
     const [yyyy,mm,dd] = iso.split('-');
     return `${dd}-${mm}-${yyyy}`;
-  }catch(e){ return esc(d); }
+  }catch(e){ return String(d); }
 }
+// Same, safe to put into HTML
+function fmtDate(d){ return esc(fmtDatePlain(d)); }
 function fmtDateTime(d){
   if(!d) return '—';
   try{
