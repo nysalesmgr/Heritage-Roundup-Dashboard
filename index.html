@@ -2547,6 +2547,10 @@ function dataChecks(){
     notScanned.length ? `Not scanned yet: ${names(notScanned)}`
     : unreadable.length ? `Scanned but no ID number found — check the document: ${names(unreadable)}` : 'All active booking engine applicants have ID details' });
 
+  // ID still valid on move-in day
+  const expired = active.filter(a => { const c = editableCache[a.ref_number]||{}; const exp = rmsISODate(c.passport_expiry||''); const mi = rmsISODate(c.move_in||a.start_date||'') || todayNY(); return exp && exp < mi; });
+  checks.push({ ok: !expired.length, label: 'ID valid at move-in', detail: expired.length ? `ID expires before move-in: ${expired.map(a=>`${a.first_name||''} ${a.last_name||''} (expires ${fmtDatePlain((editableCache[a.ref_number]||{}).passport_expiry)})`).join(', ')}` : 'All IDs are valid at move-in' });
+
   // Booked unit understood (Boston website names → RMS units)
   const unknownUnit = active.filter(a => isBE(a) && a._property === 'boston' && !(editableCache[a.ref_number]||{}).reservation_no && rmsDashboardUnit(a)
     && !rmsBookedApartments(a).length && !/^922\s/i.test(rmsDashboardUnit(a)));
@@ -2837,14 +2841,27 @@ function idDetailsFromText(text){
   if(!out.expiry_date) out.expiry_date = dateAfter(/\b(?:4B\s*)?(?:EXP(?:IRES|IRY|IRATION)?(?:\s*DATE)?|DATE\s*OF\s*EXPIRY)\b/);
   if(!out.date_of_birth) out.date_of_birth = dateAfter(/\b(?:3\s*)?(?:DOB|DATE\s*OF\s*BIRTH|BIRTH\s*DATE)\b/);
   if(!out.document_number){
-    const m = T.match(/\b(?:4D\s*)?(?:DLN|DL\s*(?:NO\.?|#)?|LIC(?:ENSE|ENCE)?\s*(?:NO\.?|#|NUMBER)|ID\s*(?:NO\.?|#|NUMBER)|CARD\s*(?:NO\.?|#|NUMBER)|DOCUMENT\s*(?:NO\.?|#|NUMBER))\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{4,16})\b/);
-    if(m && /\d/.test(m[1])) out.document_number = m[1].replace(/-/g,'');
+    // Number after its label; licences often print it in groups ("DL H0203 71768 53012"), so join the groups
+    const m = T.match(/\b(?:4D\s*)?(?:DLN|DL\s*(?:NO\.?|#)?|LIC(?:ENSE|ENCE)?\s*(?:NO\.?|#|NUMBER)|ID\s*(?:NO\.?|#|NUMBER)|CARD\s*(?:NO\.?|#|NUMBER)|DOCUMENT\s*(?:NO\.?|#|NUMBER))[ \t]*[:.]?[ \t]*([A-Z0-9][A-Z0-9 \t-]{3,30})/);
+    if(m){
+      const words = m[1].trim().split(/[\s-]+/).filter(w => /^[A-Z0-9]+$/.test(w));
+      const state = usStateOf(T);
+      const fmts = (state && US_DL_FORMATS[state]) || null;
+      let pick = '';
+      for(let n = Math.min(words.length, 5); n >= 1 && !pick; n--){
+        const cand = words.slice(0, n).join('');
+        if(!/\d/.test(cand)) continue;
+        if(fmts ? fmts.some(re => re.test(cand)) : (n === 1 || words.slice(1, n).every(w => /^\d+$/.test(w)))) pick = cand;
+      }
+      if(!pick && words[0] && /\d/.test(words[0]) && words[0].length >= 5) pick = words[0];
+      if(pick) out.document_number = pick;
+    }
   }
   return usLicenceFallback(T, out);
 }
 // Driver licence / ID card: "SEX F", "Sex: M", "15 SEX M" …
 function genderFromID(text){
-  const m = String(text||'').toUpperCase().match(/\bSEX\s*[:.]?\s*(?:\d{1,2}\s*)?([MF])\b/);
+  const m = String(text||'').toUpperCase().match(/\b(?:SEX|GENDER)\s*[:.]?\s*(?:\d{1,2}\s*)?([MF])\b/);
   return m ? (m[1]==='M' ? 'Male' : 'Female') : '';
 }
 
