@@ -979,6 +979,46 @@ async function loadApps(showMsg){
   }
 }
 
+// BOSTON booking engine: row for the second licensee. Not a database row of its own —
+// it is rebuilt from the first applicant's form on every load; status and edits live in editable_data.
+function bostonSecondLicensee(main, o){
+  const ref = String(main.ref_number||main.id) + '-2';
+  const cached = editableCache[ref]||{};
+  const mainD = editableCache[String(main.ref_number||main.id)]||{};
+  const row = {
+    ref_number: ref, id: ref, _parent_ref: String(main.ref_number||main.id),
+    created_at: main.created_at, submitted_at: main.submitted_at,
+    first_name: o.first_name||'', last_name: o.last_name||'', email: o.email||'', phone: o.phone||'',
+    college: o.college||'', address: o.address||'',
+    apartment: main.apartment, bedroom_choice: main.bedroom_choice, viewing_preference: main.viewing_preference,
+    start_date: main.start_date, end_date: main.end_date, payment_plan: main.payment_plan,
+    monthly_rate: '', occupants: '1',
+    license_url: o.driver_license_url||'', enrollment_url: o.enrollment_letter_url||'', internship_url: o.internship_offer_url||'',
+    raw_data: { occupants_details: JSON.stringify([o]) },
+    status: cached.formsite_status || main.status || 'Pending Review',
+    _source: main._source, _property: 'boston', _table: 'booking_engine_licensee2'
+  };
+  // Same unit, dates, season and source as the first licensee (rent stays on the first row only)
+  const updates = {};
+  ['unit','move_in','move_out','season','lead_source','payment_plan'].forEach(k=>{ if(!cached[k] && mainD[k]) updates[k] = mainD[k]; });
+  if(Object.keys(updates).length){ editableCache[ref] = {...cached, ...updates}; setTimeout(()=>setNYData(ref, updates), 150); }
+  return row;
+}
+// Link each second-licensee row to its first licensee (once; stored in linked_reservations)
+async function linkBostonPairs(){
+  for(const a of apps.filter(x=>x._parent_ref)){
+    if(getLinkedRefs(a._parent_ref).includes(a.ref_number)) continue;
+    try{
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/linked_reservations`, {
+        method:'POST', headers:{...SB_HEADERS,'Prefer':'return=representation'},
+        body: JSON.stringify({ ref_number: a._parent_ref, linked_ref: a.ref_number, created_by: 'Booking Engine' })
+      });
+      if(res.ok){ const rows = await res.json(); if(rows[0]) linkedReservations.push(rows[0]); }
+      else console.warn('Auto-link failed:', res.status, await res.text());
+    }catch(e){ console.warn('Auto-link error:', e); }
+  }
+}
+
 // BOSTON: Supabase booking engine + Formsite via Supabase
 async function loadBostonApps(pre){
   try {
@@ -1032,7 +1072,10 @@ async function loadBostonApps(pre){
         editableCache[ref] = {...cached, ...updates};
         setTimeout(()=>setNYData(ref, updates), 100);
       }
+      // Second licensee on the same form gets their own row ("<ref>-2"), linked to the first
+      if(occ[1] && (occ[1].first_name || occ[1].last_name)) apps.push(bostonSecondLicensee(entry, occ[1]));
     }); }
+    await linkBostonPairs();
   } catch(e){ console.error('Supabase error:', e); }
 
   try {
