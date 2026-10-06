@@ -2274,6 +2274,8 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
+  setTimeout(() => rmsWarmUp(a), 0);
+
   // Name on the document differs from the form (read earlier, e.g. by the background scan) → show it again
   {
     const c = editableCache[a.ref_number] || {};
@@ -3430,6 +3432,37 @@ function rmsSelection(){
   return { client: client || '', propId: propId || '' };
 }
 
+// ── RMS lists that rarely change, kept for 30 minutes (and fetched ahead when an applicant is opened) ──
+const rmsMeta = {};
+function rmsCached(key, fn){
+  const hit = rmsMeta[key];
+  if(hit && Date.now() - hit.t < 30*60*1000) return hit.p;
+  const p = fn().catch(e => { delete rmsMeta[key]; throw e; });
+  rmsMeta[key] = { p, t: Date.now() };
+  return p;
+}
+const rmsClientsCached = () => rmsCached('clients', async () => { const c = await rmsCall('/_clients', 'GET'); return Array.isArray(c) ? c : []; });
+const rmsPropertiesCached = c => rmsCached('props|'+c, async () => { const r = await rmsCall('/properties?modelType=basic', 'GET', null, c); return Array.isArray(r) ? r : r.result||[]; });
+const rmsCategoriesCached = (c, pid) => rmsCached('cats|'+c+'|'+pid, async () => { const r = await rmsCall(`/categories?modelType=basic&propertyId=${pid}`, 'GET', null, c); return Array.isArray(r) ? r : r.result||[]; });
+// NY buildings → RMS account (from the RMS unit lists, 2026-10-06)
+const NY_BUILDING_PROPERTY = { '308W':'chelsea', '152':'chelsea', '308E':'midtown', '111':'midtown', '115':'midtown', '138':'midtown', '143':'midtown',
+  '133':'soho', '176':'soho', '230':'soho', '235':'soho', '81':'soho', '336':'union square', '35':'union square', '85':'union square' };
+function rmsPropertyHint(a){
+  if((a._property || currentProperty) === 'boston') return 'boston';
+  const b = (rmsDashboardUnit(a).match(/^(\d+[EW]?)\s/i) || [])[1];
+  return b ? NY_BUILDING_PROPERTY[b.toUpperCase()] || '' : '';
+}
+// Fetch the lists for this applicant's property in the background, so Create in RMS opens quickly
+async function rmsWarmUp(a){
+  try{
+    const hint = a ? rmsPropertyHint(a) : '';
+    const clients = await rmsClientsCached();
+    const c = clients.find(x => hint && x.name.toLowerCase().includes(hint));
+    await Promise.all(clients.map(x => rmsPropertiesCached(x.key).catch(()=>[])));
+    if(c){ const props = await rmsPropertiesCached(c.key); for(const p of props){ rmsCategoriesCached(c.key, p.id).catch(()=>{}); rmsAllAreas(c.key, p.id).catch(()=>{}); } }
+  }catch(e){ /* RMS not reachable — the modal will say so */ }
+}
+
 async function openRmsModal(){
   rmsSelectedRef = selectedRef; // store before panel might close
   document.getElementById('rms-modal').classList.add('on');
@@ -3443,7 +3476,7 @@ async function openRmsModal(){
   try {
 
     // Load properties from every RMS account (one account per property)
-    const clients = await rmsCall('/_clients', 'GET');
+    const clients = await rmsClientsCached();
     const propSel = document.getElementById('rms-property');
     propSel.innerHTML = '<option value="">Select property…</option>';
     // Clear any category/unit left over from the previous applicant
@@ -3452,8 +3485,8 @@ async function openRmsModal(){
     const failed = []; let firstErr = '';
     await Promise.all((Array.isArray(clients) ? clients : []).map(async c => {
       try{
-        const properties = await rmsCall('/properties?modelType=basic', 'GET', null, c.key);
-        (Array.isArray(properties) ? properties : properties.result||[]).forEach(p=>{
+        const properties = await rmsPropertiesCached(c.key);
+        properties.forEach(p=>{
           const opt = document.createElement('option');
           opt.value = c.key + '|' + p.id; opt.textContent = p.name || c.name;
           propSel.appendChild(opt);
@@ -3496,13 +3529,15 @@ async function openRmsModal(){
     document.getElementById('rms-form').style.display = 'block';
 
     // Property: the applicant's city decides (Boston page → Boston); in NY, the unit picks between the 4 properties
-    rmsAreaCache = {};
+    if(Date.now() - rmsAreaCacheTime > 30*60*1000){ rmsAreaCache = {}; rmsAreaCacheTime = Date.now(); }
     rmsUnitHint('');
     const unit = rmsDashboardUnit(a);
     const isBoston = (a._property || currentProperty) === 'boston';
     const cityOpts = [...propSel.options].filter(o=>o.value && (/boston/i.test(o.textContent) === isBoston));
-    if(cityOpts.length === 1){
-      propSel.value = cityOpts[0].value;
+    const hint = rmsPropertyHint(a);
+    const hinted = hint ? cityOpts.filter(o => o.textContent.toLowerCase().includes(hint)) : [];
+    if(cityOpts.length === 1 || hinted.length === 1){
+      propSel.value = (hinted[0] || cityOpts[0]).value;
       await rmsLoadCategories();
     } else if(unit){
       const opts = cityOpts.length ? cityOpts : [...propSel.options].filter(o=>o.value);
@@ -3588,11 +3623,14 @@ function rmsMatchArea(areas, unit){
   return partial.length === 1 ? partial[0] : null;
 }
 let rmsAreaCache = {}; // "<client>|<propertyId>" -> all areas for that property
+let rmsAreaCacheTime = Date.now();
 async function rmsAllAreas(client, propId){
   const k = client + '|' + propId;
   if(!rmsAreaCache[k]){
-    const res = await rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET', null, client);
-    rmsAreaCache[k] = Array.isArray(res) ? res : res.result||[];
+    // Keep the request itself, so calls made at the same time share one download
+    rmsAreaCache[k] = rmsCall(`/areas?modelType=basic&propertyId=${propId}&limit=2000`, 'GET', null, client)
+      .then(res => Array.isArray(res) ? res : res.result||[])
+      .catch(e => { delete rmsAreaCache[k]; throw e; });
   }
   return rmsAreaCache[k];
 }
@@ -3744,10 +3782,11 @@ async function rmsLoadCategories(){
   document.getElementById('rms-category').innerHTML = '<option value="">Loading…</option>';
   document.getElementById('rms-area').innerHTML = '<option value="">Select area…</option>';
   try{
-    const cats = await rmsCall(`/categories?modelType=basic&propertyId=${propId}`, 'GET', null, client);
+    const areasP = rmsAllAreas(client, propId).catch(()=>[]);   // fetched alongside the categories
+    const cats = await rmsCategoriesCached(client, propId);
     const catSel = document.getElementById('rms-category');
     catSel.innerHTML = '<option value="">Select category…</option>';
-    (Array.isArray(cats) ? cats : cats.result||[]).forEach(c=>{
+    cats.forEach(c=>{
       const opt = document.createElement('option');
       opt.value = c.id; opt.textContent = c.name||c.id;
       catSel.appendChild(opt);
@@ -3757,7 +3796,7 @@ async function rmsLoadCategories(){
     const unit = rmsDashboardUnit(a);
     if(unit){
       try{
-        const match = rmsMatchArea(await rmsAllAreas(client, propId), unit);
+        const match = rmsMatchArea(await areasP, unit);
         if(match && [...catSel.options].some(o=>o.value===String(match.categoryId))){
           catSel.value = String(match.categoryId);
           await rmsLoadAreas();
