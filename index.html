@@ -366,6 +366,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
             <div class="sw"><span class="si">🔍</span><input type="text" id="search-input" placeholder="Search name, email, ref…" oninput="renderTable()"></div>
             <select class="fs" id="status-filter" onchange="renderTable()">
               <option value="all">All statuses</option>
+              <option value="attention">⚠ Needs checking</option>
               <option value="Pending Review">Pending Review</option>
               <option value="Pending VMU/IPT">Pending VMU/IPT</option>
               <option value="Recap Sent">Recap Sent</option>
@@ -1613,6 +1614,24 @@ function renderCompletedPage(){
   tbody.innerHTML = completed.map(a=>appRow(a, true)).join('');
 }
 
+// Things on an application that staff should check (shown as ⚠ in the table and at the top of the panel)
+function appIssues(a){
+  const out = [];
+  if(['To Drop','Drop Out ($500)','Payment Received/Finalized'].includes(a.status)) return out;
+  const c = editableCache[a.ref_number] || {};
+  const sf = c.scanned_first_name, sl = c.scanned_last_name;
+  if((sf && a.first_name && sf.toUpperCase() !== String(a.first_name).toUpperCase()) || (sl && a.last_name && sl.toUpperCase() !== String(a.last_name).toUpperCase()))
+    out.push(`Name differs from the ID: ${[sf,sl].filter(Boolean).join(' ')}`);
+  const exp = rmsISODate(c.passport_expiry||''), mi = rmsISODate(c.move_in||a.start_date||a.formsite_movein||'') || todayNY();
+  if(exp && exp < mi) out.push(`ID expires ${fmtDatePlain(exp)}, before move-in`);
+  if(passportScanSource(a) && c.doc_scanned_at && scanMissing(a)) out.push('ID details incomplete (number, expiry, date of birth or type)');
+  if(/Booking Engine/.test(a._source||'') && !a._parent_ref && Object.keys(a.raw_data||{}).some(k=>k.startsWith('stored_')) && !appDocUrls(a).length) out.push('Documents not showing');
+  return out;
+}
+function issueBadge(a){
+  const list = appIssues(a);
+  return list.length ? `<span title="${esc(list.join('\n'))}" style="display:inline-block;margin-top:3px;font-size:10.5px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:1px 8px">⚠ ${list.length === 1 ? esc(list[0]) : list.length + ' things to check'}</span>` : '';
+}
 function appRow(a, showReservation=false){
   return `<tr onclick="openPanel('${escJs(a.ref_number)}')" style="cursor:pointer">
     <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
@@ -1623,6 +1642,7 @@ function appRow(a, showReservation=false){
         ${isBlacklisted(a.first_name,a.last_name,a.email)?'🚫 ':''}${isLinked(a.ref_number)?'🔗 ':''}${esc(a.first_name||'')} ${esc(a.last_name||'')}
       </div>
       <div class="td-email">${esc(a.email||'')}</div>
+      ${issueBadge(a)}
     </td>
     ${nyCell(a.ref_number,'lead_source','text', a.formsite_source||'')}
     ${showReservation ? nyCell(a.ref_number,'reservation_no','text') : ''}
@@ -2104,7 +2124,7 @@ function renderTable(){
     if(dupName && !activeRefs.has(a.ref_number)) return false;
     const name = ((a.first_name||'') + ' ' + (a.last_name||'')).toLowerCase();
     const matchQ = !q || name.includes(q) || (a.email||'').toLowerCase().includes(q) || (a.ref_number||'').toLowerCase().includes(q);
-    const matchS = sf==='all' || a.status===sf;
+    const matchS = sf==='all' || (sf==='attention' ? appIssues(a).length > 0 : a.status===sf);
     const matchSo = sof==='all' || a._source===sof;
     return matchQ && matchS && matchSo;
   });
@@ -3013,7 +3033,8 @@ function needsScan(a){
   if(scanTried.has(a.ref_number)) return false;
   const c = editableCache[a.ref_number]||{};
   if(!c.doc_scanned_at) return true;
-  return scanMissing(a) && String(c.doc_scanned_at).slice(0,10) < todayNY();
+  // Also re-read (once a day) documents scanned before the name was kept, so name differences can be flagged
+  return (scanMissing(a) || (!c.scanned_first_name && !c.scanned_last_name)) && String(c.doc_scanned_at).slice(0,10) < todayNY();
 }
 // New booking engine applications (Boston + NY, both licensees): read the passport / ID in the background,
 // one at a time, so details are filled in before anyone opens the applicant
