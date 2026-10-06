@@ -3647,6 +3647,7 @@ async function rmsSecondBooking(client, propId, main, mainAreaId){
   const la = ref ? apps.find(x=>x.ref_number===ref) : null;
   if(!la) return null;
   if(getNYData(la.ref_number).reservation_no) return null; // already booked in RMS (e.g. applied first through Formsite)
+  if(rmsNorm(rmsDashboardUnit(la)) === rmsNorm(rmsDashboardUnit(main))) return null; // same unit (studio / 1 bedroom for 2) → one booking
   const unit = rmsDashboardUnit(la);
   if(!unit) throw new Error(`Linked applicant ${la.first_name||''} ${la.last_name||''} has no Unit on the dashboard — add their unit first.`);
   const area = rmsMatchArea(await rmsAllAreas(client, propId), unit);
@@ -3766,8 +3767,11 @@ async function rmsCreateReservation(){
     // Documents: everyone's go onto one booking — the L room when the pair has L / R, otherwise the main booking
     toast('Uploading documents to RMS…');
     const docRes = (roomSide && roomSide[2].toUpperCase()==='R' && resId2) ? resId2 : resId;
+    // Two people sharing one unit (studio / 1 bedroom): one booking, both people's documents on it
+    const sharedLa = second ? null : getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r))
+      .find(x => x && !getNYData(x.ref_number).reservation_no && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(rmsDashboardUnit(a)));
     const n1 = await rmsUploadDocs(rmsClient, docRes, a);
-    const n2 = second ? await rmsUploadDocs(rmsClient, docRes, second.la) : 0;
+    const n2 = second ? await rmsUploadDocs(rmsClient, docRes, second.la) : sharedLa ? await rmsUploadDocs(rmsClient, docRes, sharedLa) : 0;
 
     // Both people listed as guests on that booking (the other person added as a secondary guest)
     try{
@@ -3775,8 +3779,7 @@ async function rmsCreateReservation(){
       if(second && resId2) other = docRes === resId ? g2 : guestId;
       else if(!second){
         // Linked person sharing this same unit (one booking): add them as a guest too
-        const la = getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r))
-          .find(x => x && !getNYData(x.ref_number).reservation_no && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(rmsDashboardUnit(a)));
+        const la = sharedLa;
         if(la){ other = await rmsSearchOrCreateGuest(rmsClient, la, idTypeOf(la)); setNYData(la.ref_number, { reservation_no: String(resId) }); }
       }
       if(other) await rmsCall(`/reservations/${docRes}/addGuest?guestId=${parseInt(other)}`, 'PUT', {}, rmsClient);
@@ -3784,13 +3787,15 @@ async function rmsCreateReservation(){
       if(other){
         const lGuest = (second && resId2 && docRes !== resId) ? g2 : guestId;
         const otherApp = (second && resId2) ? (docRes === resId ? second.la : a)
-          : getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r)).find(x => x && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(rmsDashboardUnit(a)));
+          : sharedLa;
         await rmsSetSecondaryId(rmsClient, lGuest, otherApp);
       }
     }catch(e){ console.warn('Add secondary guest failed:', e.message); toast('⚠️ Booking created, but the second guest could not be added — add them in RMS'); }
     toast(resId2
       ? `✓ Bookings ${resId} (main) and ${resId2} created — ${n1+n2} document(s) uploaded`
-      : `✓ Booking ${resId} created — ${n1} document(s) uploaded`);
+      : `✓ Booking ${resId} created${sharedLa ? ' for both people' : ''} — ${n1+n2} document(s) uploaded`);
+    // Both rows now show the RMS unit they were booked into
+    if(sharedLa && areaName.trim()){ setNYData(a.ref_number, { unit: areaName.trim() }); setNYData(sharedLa.ref_number, { unit: areaName.trim() }); }
 
     closeRmsModal();
 
