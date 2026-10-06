@@ -2631,6 +2631,64 @@ function detectDocType(text, mrz){
   return '';
 }
 
+// US driver licence / state ID: fill whatever the labels didn't give, using the state's own number format
+// and the dates printed on the card (expiry = latest future date, date of birth = earliest plausible birth date)
+const US_STATES = {AL:'ALABAMA',AK:'ALASKA',AZ:'ARIZONA',AR:'ARKANSAS',CA:'CALIFORNIA',CO:'COLORADO',CT:'CONNECTICUT',DE:'DELAWARE',DC:'DISTRICT OF COLUMBIA',FL:'FLORIDA',GA:'GEORGIA',HI:'HAWAII',ID:'IDAHO',IL:'ILLINOIS',IN:'INDIANA',IA:'IOWA',KS:'KANSAS',KY:'KENTUCKY',LA:'LOUISIANA',ME:'MAINE',MD:'MARYLAND',MA:'MASSACHUSETTS',MI:'MICHIGAN',MN:'MINNESOTA',MS:'MISSISSIPPI',MO:'MISSOURI',MT:'MONTANA',NE:'NEBRASKA',NV:'NEVADA',NH:'NEW HAMPSHIRE',NJ:'NEW JERSEY',NM:'NEW MEXICO',NY:'NEW YORK',NC:'NORTH CAROLINA',ND:'NORTH DAKOTA',OH:'OHIO',OK:'OKLAHOMA',OR:'OREGON',PA:'PENNSYLVANIA',RI:'RHODE ISLAND',SC:'SOUTH CAROLINA',SD:'SOUTH DAKOTA',TN:'TENNESSEE',TX:'TEXAS',UT:'UTAH',VT:'VERMONT',VA:'VIRGINIA',WA:'WASHINGTON',WV:'WEST VIRGINIA',WI:'WISCONSIN',WY:'WYOMING'};
+// Licence number formats by state (letters = A, digits = 9), most common first
+const US_DL_FORMATS = {
+  AL:[/^\d{7,8}$/], AK:[/^\d{6,7}$/], AZ:[/^[A-Z]\d{8}$/,/^\d{9}$/], AR:[/^9\d{8}$/,/^\d{8,9}$/], CA:[/^[A-Z]\d{7}$/],
+  CO:[/^\d{2}-?\d{3}-?\d{4}$/,/^\d{9}$/], CT:[/^\d{9}$/], DE:[/^\d{5,7}$/], DC:[/^\d{7}$/,/^\d{9}$/], FL:[/^[A-Z]\d{12}$/],
+  GA:[/^\d{7,9}$/], HI:[/^H\d{8}$/,/^\d{9}$/], ID:[/^[A-Z]{2}\d{6}[A-Z]$/,/^\d{9}$/], IL:[/^[A-Z]\d{11,12}$/], IN:[/^\d{4}-?\d{2}-?\d{4}$/,/^\d{9,10}$/,/^[A-Z]\d{9}$/],
+  IA:[/^\d{3}[A-Z]{2}\d{4}$/,/^\d{9}$/], KS:[/^K\d{8}$/,/^\d{9}$/], KY:[/^[A-Z]\d{8,9}$/,/^\d{9}$/], LA:[/^\d{8,9}$/], ME:[/^\d{7}[A-Z]?$/,/^\d{8}$/],
+  MD:[/^[A-Z]\d{12}$/,/^MD\d{11}$/], MA:[/^S\d{8}$/,/^[A-Z]\d{8}$/,/^\d{9}$/], MI:[/^[A-Z]\d{12}$/,/^[A-Z]\d{10}$/], MN:[/^[A-Z]\d{12}$/], MS:[/^\d{9}$/],
+  MO:[/^[A-Z]\d{5,9}$/,/^\d{9}[A-Z]?$/,/^\d{3}[A-Z]\d{6}$/], MT:[/^\d{13}$/,/^[A-Z]\d{8}$/,/^\d{9}$/], NE:[/^[A-Z]\d{6,8}$/], NV:[/^\d{10}$/,/^\d{12}$/,/^X\d{8}$/,/^\d{9}$/], NH:[/^\d{2}[A-Z]{3}\d{5}$/,/^NHL\d{8}$/],
+  NJ:[/^[A-Z]\d{14}$/], NM:[/^\d{9}$/,/^\d{8}$/], NY:[/^\d{9}$/,/^[A-Z]\d{7}$/,/^[A-Z]\d{18}$/,/^\d{16}$/], NC:[/^\d{6,12}$/], ND:[/^[A-Z]{3}\d{6}$/,/^\d{9}$/],
+  OH:[/^[A-Z]{2}\d{6}$/,/^[A-Z]\d{4,8}$/,/^\d{8}$/], OK:[/^[A-Z]\d{9}$/,/^\d{9}$/], OR:[/^\d{6,9}$/,/^[A-Z]\d{6}$/], PA:[/^\d{8}$/], RI:[/^\d{7}$/,/^V\d{6}$/],
+  SC:[/^\d{9}$/,/^\d{5,11}$/], SD:[/^\d{8,10}$/,/^\d{12}$/], TN:[/^\d{8,9}$/], TX:[/^\d{8}$/,/^\d{7}$/], UT:[/^\d{9,10}$/,/^\d{4,8}$/],
+  VT:[/^\d{8}$/,/^\d{7}A$/], VA:[/^[A-Z]\d{8}$/,/^[A-Z]\d{9,11}$/,/^\d{9}$/], WA:[/^WDL[A-Z0-9]{9}$/,/^[A-Z*]{1,7}[A-Z0-9*]{5}$/], WV:[/^\d{7}$/,/^[A-Z]{1,2}\d{5,6}$/],
+  WI:[/^[A-Z]\d{13}$/], WY:[/^\d{9,10}$/],
+};
+function usStateOf(T){
+  for(const [ab,name] of Object.entries(US_STATES)) if(new RegExp('\\b'+name+'\\b').test(T)) return ab;
+  const m = T.match(/\bUSA\s*[-,]?\s*([A-Z]{2})\b|\b([A-Z]{2})\s*USA\b/);
+  const ab = m && (m[1]||m[2]);
+  return ab && US_STATES[ab] ? ab : '';
+}
+function usLicenceFallback(T, out){
+  const state = usStateOf(T);
+  if(!state) return out; // only US cards: other countries write dates day-first
+  // Dates on a US card are MM/DD/YYYY (sometimes MM-DD-YYYY or MMDDYYYY next to a label)
+  const today = todayNY();
+  const dates = [];
+  (T.match(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4}\b/g)||[]).forEach(v=>{
+    const x = v.split(/[\/.-]/); const mm=+x[0], dd=+x[1];
+    if(mm>=1 && mm<=12 && dd>=1 && dd<=31) dates.push(`${x[2]}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`);
+  });
+  if(!out.expiry_date){
+    const future = dates.filter(d=>d > today).sort();
+    if(future.length) out.expiry_date = future[future.length-1];
+  }
+  if(!out.date_of_birth){
+    const yr = +today.slice(0,4);
+    const births = dates.filter(d=>{ const y=+d.slice(0,4); return y >= yr-100 && y <= yr-15; }).sort();
+    if(births.length) out.date_of_birth = births[0];
+  }
+  if(!out.document_number && state && US_DL_FORMATS[state]){
+    // Candidates: tokens on the card, plus digit groups the scan split with spaces ("123 456 789")
+    const toks = [[],[],[],[]]; // single words first, then 2/3/4 words joined
+    T.split('\n').forEach(line=>{
+      const words = line.replace(/[:#]/g,' ').split(/\s+/).filter(Boolean);
+      words.forEach((w,i)=>{ for(let n=0;n<4 && i+n<words.length;n++) toks[n].push(words.slice(i,i+n+1).join('').replace(/-/g,'')); });
+    });
+    const dateLike = t => /^\d{8}$/.test(t) && dates.some(d=>{ const [y,m,dd]=d.split('-'); return t===m+dd+y; });
+    const zipLike = t => /^\d{5}$/.test(t);
+    for(const re of US_DL_FORMATS[state]){
+      const hit = toks.flat().find(t => re.test(t) && /\d/.test(t) && !dateLike(t) && !zipLike(t) && !/^(19|20)\d{2}$/.test(t));
+      if(hit){ out.document_number = hit; break; }
+    }
+  }
+  return out;
+}
 // ID card (3-line MRZ) or driver licence printed labels: document number, expiry, date of birth
 const MON3 = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
 function idDetailsFromText(text){
@@ -2663,7 +2721,7 @@ function idDetailsFromText(text){
     const m = T.match(/\b(?:4D\s*)?(?:DLN|DL\s*(?:NO\.?|#)?|LIC(?:ENSE|ENCE)?\s*(?:NO\.?|#|NUMBER)|ID\s*(?:NO\.?|#|NUMBER)|CARD\s*(?:NO\.?|#|NUMBER)|DOCUMENT\s*(?:NO\.?|#|NUMBER))\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{4,16})\b/);
     if(m && /\d/.test(m[1])) out.document_number = m[1].replace(/-/g,'');
   }
-  return out;
+  return usLicenceFallback(T, out);
 }
 // Driver licence / ID card: "SEX F", "Sex: M", "15 SEX M" …
 function genderFromID(text){
