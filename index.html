@@ -3725,10 +3725,10 @@ async function rmsCreateReservation(){
     }
 
     // ── Second booking (linked applicant, own unit, no charges) ──
-    let resId2 = null;
+    let resId2 = null, g2 = null;
     if(second){
       try{
-        const g2 = await rmsSearchOrCreateGuest(rmsClient, second.la, idTypeOf(second.la));
+        g2 = await rmsSearchOrCreateGuest(rmsClient, second.la, idTypeOf(second.la));
         const p2 = {
           guestId: g2, categoryId: second.area.categoryId, areaId: second.area.id,
           arrivalDate: second.stay.moveIn + ' 15:00:00', departureDate: second.stay.moveOut + ' 11:00:00',
@@ -3748,6 +3748,19 @@ async function rmsCreateReservation(){
     const docRes = (roomSide && roomSide[2].toUpperCase()==='R' && resId2) ? resId2 : resId;
     const n1 = await rmsUploadDocs(rmsClient, docRes, a);
     const n2 = second ? await rmsUploadDocs(rmsClient, docRes, second.la) : 0;
+
+    // Both people listed as guests on that booking (the other person added as a secondary guest)
+    try{
+      let other = null;
+      if(second && resId2) other = docRes === resId ? g2 : guestId;
+      else if(!second){
+        // Linked person sharing this same unit (one booking): add them as a guest too
+        const la = getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r))
+          .find(x => x && !getNYData(x.ref_number).reservation_no && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(rmsDashboardUnit(a)));
+        if(la){ other = await rmsSearchOrCreateGuest(rmsClient, la, idTypeOf(la)); setNYData(la.ref_number, { reservation_no: String(resId) }); }
+      }
+      if(other) await rmsCall(`/reservations/${docRes}/addGuest?guestId=${parseInt(other)}`, 'PUT', {}, rmsClient);
+    }catch(e){ console.warn('Add secondary guest failed:', e.message); toast('⚠️ Booking created, but the second guest could not be added — add them in RMS'); }
     toast(resId2
       ? `✓ Bookings ${resId} (main) and ${resId2} created — ${n1+n2} document(s) uploaded`
       : `✓ Booking ${resId} created — ${n1} document(s) uploaded`);

@@ -46,6 +46,7 @@ const ALLOW: Array<[string, RegExp]> = [
   ["GET", /^\/reservations\/\d+\?modelType=full$/],
   ["PATCH", /^\/reservations\/\d+$/],
   ["POST", /^\/reservations\/\d+\/document$/],
+  ["PUT", /^\/reservations\/\d+\/addGuest\?guestId=\d+$/],   // secondary guest on a booking
   // Read-only lookup lists used to match names to RMS ids
   ["GET", /^\/(rates|bookingSources|countries|idTypes|companies|mandatoryFields)$/],
 ];
@@ -60,6 +61,7 @@ const BODY_FIELDS: Array<[string, RegExp, string[]]> = [
   ["POST",  /^\/guests\/search\?modelType=basic$/, ["email","given","surname"]],
   ["POST",  /^\/availableAreas$/, ["propertyId","categoryIds","dateFrom","dateTo"]],
   ["POST",  /^\/reservations\/\d+\/document$/, ["documentName","documentContent","note"]],
+  ["PUT",   /^\/reservations\/\d+\/addGuest\?guestId=\d+$/, []],
 ];
 function cleanBody(method: string, path: string, raw: string): string | undefined {
   const rule = BODY_FIELDS.find(([m, re]) => m === method && re.test(path));
