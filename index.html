@@ -994,6 +994,13 @@ async function loadBostonApps(pre){
         end_date:      r.end_date   || raw.move_out || '',
         monthly_rate:  r.monthly_rate || raw.monthly_rate || '',
         college:       occ[0]?.college || '',
+        // Second licensee: the booking engine sends them only inside occupants_details
+        first_name_2:  r.first_name_2 || occ[1]?.first_name || '',
+        last_name_2:   r.last_name_2  || occ[1]?.last_name  || '',
+        email_2:       r.email_2      || occ[1]?.email      || '',
+        phone_2:       r.phone_2      || occ[1]?.phone      || '',
+        college_2:     r.college_2    || occ[1]?.college    || '',
+        occupants:     String(r.occupants || raw.occupants || (occ.length > 1 ? occ.length : 1)),
         license_url:   r.license_url    || occ[0]?.driver_license_url    || '',
         enrollment_url:r.enrollment_url || occ[0]?.enrollment_letter_url || '',
         internship_url:r.internship_url || occ[0]?.internship_offer_url  || '',
@@ -1729,7 +1736,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','updated_at'];
   // Send only the fields that changed (so one person's save can't undo another's), and keep the
   // record's own property even if the view was switched while this save was pending
   const prop = (apps.find(x=>x.ref_number===ref)||{})._property || before.property || currentProperty;
@@ -2126,8 +2133,10 @@ function openPanel(ref){
     document.getElementById('t-address').textContent  = a.address || occ[0]?.address || '—';
     document.getElementById('t-course').textContent   = a.course||'—';
     document.getElementById('t-referral').textContent = a.referral||'—';
-    document.getElementById('t-passport-num').textContent = a.passport_number||'—';
-    document.getElementById('t-passport-exp').textContent = a.passport_expiry ? fmtDatePlain(a.passport_expiry) : '—';
+    const pd = getNYData(a.ref_number);
+    const pNum = pd.passport_number || a.passport_number, pExp = pd.passport_expiry || a.passport_expiry;
+    document.getElementById('t-passport-num').textContent = pNum || '—';
+    document.getElementById('t-passport-exp').textContent = pExp ? fmtDatePlain(pExp) : '—';
     document.getElementById('t-dob').textContent = getNYData(a.ref_number).dob ? fmtDatePlain(getNYData(a.ref_number).dob) : '—';
     document.getElementById('t-nationality').textContent = getNYData(a.ref_number).nationality || '—';
     document.getElementById('t-gender').textContent = getNYData(a.ref_number).gender || '—';
@@ -2582,7 +2591,12 @@ function genderFromID(text){
 }
 
 // Occupants: 1 by default, plus one for each linked applicant (normally 2 when linked)
-function occupantCount(ref){ return 1 + getLinkedRefs(ref).length; }
+// Occupants = the form's own count (booking engine: 2 names on one application) or 1 + linked applicants, whichever is higher
+function occupantCount(ref){
+  const a = apps.find(x=>x.ref_number===ref);
+  const own = a && a._table === 'applications' ? (parseInt(a.occupants)||1) : 1;
+  return Math.max(own, 1 + getLinkedRefs(ref).length);
+}
 
 const PAYMENT_PLANS = ['Monthly', '2 Installments', 'Upfront'];
 // Map whatever the booking form sent to one of the three plans
@@ -2749,17 +2763,33 @@ async function scanPassport(source, ref, manual=false){
     if(extracted.last_name && a.last_name && extracted.last_name.toUpperCase() !== a.last_name.toUpperCase()){
       discrepancies.push({ field: 'Last Name', form: a.last_name, scan: extracted.last_name });
     }
-    if(extracted.document_number && a.passport_number && extracted.document_number !== a.passport_number){
-      discrepancies.push({ field: 'Passport Number', form: a.passport_number, scan: extracted.document_number });
+    // Passport number + expiry: the document is the source of truth, so the scanned value replaces the form's
+    const pUpd = {};
+    const curNum = (editableCache[ref]||{}).passport_number || a.passport_number || '';
+    const curExp = (editableCache[ref]||{}).passport_expiry || a.passport_expiry || '';
+    if(extracted.document_number && extracted.document_number !== String(curNum).trim().toUpperCase()){
+      pUpd.passport_number = extracted.document_number;
+      if(curNum) insertHistory(ref, 'field', `✏️ Passport Number: "${curNum}" → "${extracted.document_number}" (from document)`);
     }
-    if(extracted.expiry_date && a.passport_expiry && extracted.expiry_date !== rmsISODate(a.passport_expiry)){
-      discrepancies.push({ field: 'Passport Expiry', form: fmtDatePlain(a.passport_expiry), scan: fmtDatePlain(extracted.expiry_date) });
+    if(extracted.expiry_date && extracted.expiry_date !== rmsISODate(curExp)){
+      pUpd.passport_expiry = extracted.expiry_date;
+      if(curExp) insertHistory(ref, 'field', `✏️ Passport Expiry: "${fmtDatePlain(curExp)}" → "${fmtDatePlain(extracted.expiry_date)}" (from document)`);
+    }
+    if(selectedRef === ref){
+      const n = document.getElementById('t-passport-num'), x = document.getElementById('t-passport-exp');
+      if(n && pUpd.passport_number) n.textContent = pUpd.passport_number;
+      if(x && pUpd.passport_expiry) x.textContent = fmtDatePlain(pUpd.passport_expiry);
     }
 
-    // Save updates
+    // Save updates (passport fields saved separately, so a problem with them can't block the others)
     if(Object.keys(updates).length){
       editableCache[ref] = {...(editableCache[ref]||{}), ...updates};
       setNYData(ref, updates);
+    }
+    if(Object.keys(pUpd).length){
+      editableCache[ref] = {...(editableCache[ref]||{}), ...pUpd};
+      setNYData(ref, pUpd);
+      Object.assign(updates, pUpd);
     }
 
     // Show discrepancy warning if any
@@ -2865,8 +2895,8 @@ async function acceptScanValue(ref, field, value, btn){
     if(!ok){ toast('⚠️ Not saved — the database blocked the update'); return; }
     insertHistory(ref, 'field', `✏️ ${field}: "${a[col]||'(blank)'}" → "${value}" (from document)`);
   }
-  if(field === 'Passport Number') a.passport_number = value;
-  if(field === 'Passport Expiry'){ const m=String(value).match(/^(\d{2})-(\d{2})-(\d{4})$/); a.passport_expiry = m ? `${m[3]}-${m[2]}-${m[1]}` : value; }
+  if(field === 'Passport Number'){ a.passport_number = value; setNYData(ref, { passport_number: value }); }
+  if(field === 'Passport Expiry'){ const m=String(value).match(/^(\d{2})-(\d{2})-(\d{4})$/); a.passport_expiry = m ? `${m[3]}-${m[2]}-${m[1]}` : value; setNYData(ref, { passport_expiry: a.passport_expiry }); }
   if(field === 'First Name'){ a.first_name = value; const el=document.getElementById('t-first'); if(el) el.textContent=value; }
   if(field === 'Last Name'){  a.last_name  = value; const el=document.getElementById('t-last');  if(el) el.textContent=value; }
   if(field === 'Passport Number'){ const el=document.getElementById('t-passport-num'); if(el) el.textContent=value; }
@@ -2982,9 +3012,9 @@ async function rmsGuestDetails(client, applicant, idType){
   const mob = rmsMobile(applicant.phone);
   if(mob) out.mobile = mob;
   if(d.dob) out.birthday = rmsISODate(d.dob) + ' 00:00:00';
-  const pn = applicant.passport_number || d.passport_number;
+  const pn = d.passport_number || applicant.passport_number;
   if(pn && String(pn).length > 2) out.passportId = String(pn).trim();
-  const exp = applicant.passport_expiry || d.passport_expiry;
+  const exp = d.passport_expiry || applicant.passport_expiry;
   if(exp && rmsISODate(exp)){
     out.userDefined15 = rmsISODate(exp) + ' 23:59:00';   // "ID Expiry Date" on the RMS guest screen (confirmed on guest 1440)
     out.passportExpiry = rmsISODate(exp) + ' 00:00:00';
