@@ -970,6 +970,7 @@ async function loadApps(showMsg){
     if(prop !== currentProperty){ reloadPending = true; return; }
     refreshAll();
     if(showMsg) toast('Loaded ' + apps.length + ' applications ✓');
+    setTimeout(autoScanNewApplications, 1500);
   } catch(e){
     console.error('loadApps error:', e);
     toast('Loading failed — click Refresh to try again');
@@ -981,7 +982,7 @@ async function loadApps(showMsg){
 
 // BOSTON booking engine: row for the second licensee. Not a database row of its own —
 // it is rebuilt from the first applicant's form on every load; status and edits live in editable_data.
-function bostonSecondLicensee(main, o){
+function secondLicensee(main, o){
   const ref = String(main.ref_number||main.id) + '-2';
   const cached = editableCache[ref]||{};
   const mainD = editableCache[String(main.ref_number||main.id)]||{};
@@ -996,7 +997,7 @@ function bostonSecondLicensee(main, o){
     license_url: o.driver_license_url||'', enrollment_url: o.enrollment_letter_url||'', internship_url: o.internship_offer_url||'',
     raw_data: { occupants_details: JSON.stringify([o]) },
     status: cached.formsite_status || main.status || 'Pending Review',
-    _source: main._source, _property: 'boston', _table: 'booking_engine_licensee2'
+    _source: main._source, _property: main._property, _table: 'booking_engine_licensee2'
   };
   // Same unit, dates, season and source as the first licensee (rent stays on the first row only)
   const updates = {};
@@ -1005,7 +1006,7 @@ function bostonSecondLicensee(main, o){
   return row;
 }
 // Link each second-licensee row to its first licensee (once; stored in linked_reservations)
-async function linkBostonPairs(){
+async function linkLicenseePairs(){
   for(const a of apps.filter(x=>x._parent_ref)){
     if(getLinkedRefs(a._parent_ref).includes(a.ref_number)) continue;
     try{
@@ -1073,9 +1074,9 @@ async function loadBostonApps(pre){
         setTimeout(()=>setNYData(ref, updates), 100);
       }
       // Second licensee on the same form gets their own row ("<ref>-2"), linked to the first
-      if(occ[1] && (occ[1].first_name || occ[1].last_name)) apps.push(bostonSecondLicensee(entry, occ[1]));
+      if(occ[1] && (occ[1].first_name || occ[1].last_name)) apps.push(secondLicensee(entry, occ[1]));
     }); }
-    await linkBostonPairs();
+    await linkLicenseePairs();
   } catch(e){ console.error('Supabase error:', e); }
 
   try {
@@ -1143,7 +1144,10 @@ async function loadNYApps(pre){
           editableCache[ref] = {...cached, ...updates};
           setTimeout(()=>setNYData(ref, updates), 100);
         }
+        // Second licensee gets their own row, linked to the first (same as Boston)
+        if(occ[1] && (occ[1].first_name || occ[1].last_name)) apps.push(secondLicensee(app, occ[1]));
       });
+      await linkLicenseePairs();
     }
   } catch(e){ console.error('NY Summer Booking Engine error:', e); }
 
@@ -1779,7 +1783,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','updated_at'];
   // Send only the fields that changed (so one person's save can't undo another's), and keep the
   // record's own property even if the view was switched while this save was pending
   const prop = (apps.find(x=>x.ref_number===ref)||{})._property || before.property || currentProperty;
@@ -2246,10 +2250,10 @@ function openPanel(ref){
   document.getElementById('backdrop').classList.add('on');
   document.getElementById('panel').classList.add('on');
 
-  // Auto-read date of birth / nationality from the passport (only while they're still blank)
+  // Auto-read the passport / ID once (the background scan after loading normally gets there first)
   {
     const cached = editableCache[a.ref_number] || {};
-    if(!(cached.dob && cached.nationality && cached.gender && cached.id_type)){
+    if(needsScan(a) || (!cached.doc_scanned_at && !scanTried.has(a.ref_number) && !(cached.dob && cached.nationality && cached.gender && cached.id_type && cached.passport_number))){
       const src = passportScanSource(a);
       if(src) scanPassport(src, a.ref_number); // starts straight away, runs in the background
     }
@@ -2627,6 +2631,40 @@ function detectDocType(text, mrz){
   return '';
 }
 
+// ID card (3-line MRZ) or driver licence printed labels: document number, expiry, date of birth
+const MON3 = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
+function idDetailsFromText(text){
+  const out = { document_number:'', expiry_date:'', date_of_birth:'' };
+  const T = String(text||'').toUpperCase();
+  const lines = T.split('\n').map(l=>l.replace(/\s+/g,'').replace(/«/g,'<'));
+  // ICAO TD1 (ID cards): line 1 "I<CCC" + doc no, line 2 birth date / sex / expiry
+  const l1 = lines.find(l=>/^[IAC][A-Z<][A-Z<]{3}[A-Z0-9<]{9}[0-9<]/.test(l) && l.length>=28);
+  const l2 = lines.find(l=>/^\d{6}\d[MFX<]\d{6}\d[A-Z<]{3}/.test(l));
+  if(l1){ const no=l1.substring(5,14); if(mrzCheck(no)===+l1[14]) out.document_number = no.replace(/</g,''); }
+  if(l2){
+    const dob=l2.substring(0,6), exp=l2.substring(8,14);
+    if(mrzCheck(dob)===+l2[6]){ const yr=+dob.slice(0,2), nowYY=+todayNY().slice(2,4); out.date_of_birth=`${yr>nowYY?1900+yr:2000+yr}-${dob.slice(2,4)}-${dob.slice(4,6)}`; }
+    if(mrzCheck(exp)===+l2[14]) out.expiry_date=`20${exp.slice(0,2)}-${exp.slice(2,4)}-${exp.slice(4,6)}`;
+  }
+  // Printed dates after a label: 01/31/2030 (US order), 31 JAN 2030, 2030-01-31
+  const dateAfter = re => {
+    const m = T.match(new RegExp(re.source + '\\s*[:.]?\\s*(\\d{1,2}[\\/.-]\\d{1,2}[\\/.-]\\d{4}|\\d{1,2}\\s+[A-Z]{3}\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})'));
+    if(!m) return '';
+    const v = m[m.length-1];
+    let x;
+    if((x = v.match(/^(\d{4})-(\d{2})-(\d{2})$/))) return v;
+    if((x = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/))) return `${x[3]}-${x[1].padStart(2,'0')}-${x[2].padStart(2,'0')}`;
+    if((x = v.match(/^(\d{1,2})\s+([A-Z]{3})\s+(\d{4})$/)) && MON3[x[2]]) return `${x[3]}-${MON3[x[2]]}-${x[1].padStart(2,'0')}`;
+    return '';
+  };
+  if(!out.expiry_date) out.expiry_date = dateAfter(/\b(?:4B\s*)?(?:EXP(?:IRES|IRY|IRATION)?(?:\s*DATE)?|DATE\s*OF\s*EXPIRY)\b/);
+  if(!out.date_of_birth) out.date_of_birth = dateAfter(/\b(?:3\s*)?(?:DOB|DATE\s*OF\s*BIRTH|BIRTH\s*DATE)\b/);
+  if(!out.document_number){
+    const m = T.match(/\b(?:4D\s*)?(?:DLN|DL\s*(?:NO\.?|#)?|LIC(?:ENSE|ENCE)?\s*(?:NO\.?|#|NUMBER)|ID\s*(?:NO\.?|#|NUMBER)|CARD\s*(?:NO\.?|#|NUMBER)|DOCUMENT\s*(?:NO\.?|#|NUMBER))\s*[:.]?\s*([A-Z0-9][A-Z0-9-]{4,16})\b/);
+    if(m && /\d/.test(m[1])) out.document_number = m[1].replace(/-/g,'');
+  }
+  return out;
+}
 // Driver licence / ID card: "SEX F", "Sex: M", "15 SEX M" …
 function genderFromID(text){
   const m = String(text||'').toUpperCase().match(/\bSEX\s*[:.]?\s*(?:\d{1,2}\s*)?([MF])\b/);
@@ -2731,6 +2769,32 @@ function passportScanSource(a){
   const url = a.passport_1_url || a.license_url || (path.startsWith('http') ? path : '');
   return url && /^https?:/i.test(url) ? { url } : null;
 }
+// Each document is read once: doc_scanned_at is stored after a scan (the Scan Document button always re-reads)
+const scanTried = new Set();
+function markScanned(ref){
+  scanTried.add(ref);
+  if(!(editableCache[ref]||{}).doc_scanned_at) setNYData(ref, { doc_scanned_at: new Date().toISOString() });
+}
+function needsScan(a){
+  const c = editableCache[a.ref_number]||{};
+  return !c.doc_scanned_at && !scanTried.has(a.ref_number) && !c.passport_number;
+}
+// New booking engine applications (Boston + NY, both licensees): read the passport / ID in the background,
+// one at a time, so details are filled in before anyone opens the applicant
+let bgScanRunning = false;
+async function autoScanNewApplications(){
+  if(bgScanRunning) return;
+  bgScanRunning = true;
+  try{
+    const isBE = a => /Booking Engine/.test(a._source||'');
+    const queue = apps.filter(a => isBE(a) && needsScan(a) && passportScanSource(a)).slice(0, 15);
+    for(const a of queue){
+      if(!needsScan(a)) continue;
+      scanTried.add(a.ref_number);
+      await scanPassport(passportScanSource(a), a.ref_number);
+    }
+  } finally { bgScanRunning = false; }
+}
 // Kept for older callers
 function autoScanFromStorage(storagePath, ref, bucket='documents'){ return scanPassport({ storage_path: storagePath, bucket }, ref); }
 
@@ -2747,6 +2811,11 @@ async function scanPassport(source, ref, manual=false){
 
     const extracted = parsePassportMRZ(text);
     if(!extracted.gender) extracted.gender = genderFromID(text);
+    if(!extracted.document_number || !extracted.expiry_date || !extracted.date_of_birth){
+      const idd = idDetailsFromText(text);
+      ['document_number','expiry_date','date_of_birth'].forEach(k=>{ if(!extracted[k] && idd[k]) extracted[k] = idd[k]; });
+    }
+    markScanned(ref);
     const docType = detectDocType(text, extracted);
     if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth && !extracted.gender && !docType){
       if(manual) toast('No passport details found on this document');
