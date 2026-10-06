@@ -1296,7 +1296,8 @@ function refreshAll(){
   document.getElementById('sb-total').textContent = total;
   document.getElementById('sb-pend').textContent  = pend;
   document.getElementById('sb-appr').textContent  = appr;
-  document.getElementById('pending-badge').textContent = pend;
+  // Same number as the rows on the Applications page (drops and completed live on their own pages)
+  document.getElementById('pending-badge').textContent = apps.filter(a=>!['To Drop','Drop Out ($500)','Payment Received/Finalized'].includes(a.status)).length;
   renderRecent();
   renderFinishLine();
   renderRenewals();
