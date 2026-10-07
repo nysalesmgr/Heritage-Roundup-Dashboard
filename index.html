@@ -2297,6 +2297,10 @@ function openPanel(ref){
   document.getElementById('panel').classList.add('on');
 
   setTimeout(() => rmsWarmUp(a), 0);
+  {
+    const issues = appIssues(a);
+    if(issues.length) document.getElementById('pan-meta').innerHTML += ` <span style="font-size:11px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #F59E0B;padding:2px 8px;border-radius:10px;margin-left:6px">⚠ ${issues.map(esc).join(' · ')}</span>`;
+  }
 
   // Name on the document differs from the form (read earlier, e.g. by the background scan) → show it again
   {
@@ -3034,7 +3038,8 @@ function needsScan(a){
   const c = editableCache[a.ref_number]||{};
   if(!c.doc_scanned_at) return true;
   // Also re-read (once a day) documents scanned before the name was kept, so name differences can be flagged
-  return (scanMissing(a) || (!c.scanned_first_name && !c.scanned_last_name)) && String(c.doc_scanned_at).slice(0,10) < todayNY();
+  if(c.scanned_first_name == null && c.scanned_last_name == null) return true;   // read before names were kept: read once more
+  return scanMissing(a) && String(c.doc_scanned_at).slice(0,10) < todayNY();
 }
 // New booking engine applications (Boston + NY, both licensees): read the passport / ID in the background,
 // one at a time, so details are filled in before anyone opens the applicant
@@ -3081,6 +3086,8 @@ async function scanPassport(source, ref, manual=false){
     }
     markScanned(ref);
     if(!extracted.document_number && !extracted.first_name && !extracted.date_of_birth && !extracted.gender && !docType){
+      const c0 = editableCache[ref]||{};
+      if(c0.scanned_first_name == null && c0.scanned_last_name == null) setNYData(ref, { scanned_first_name: '', scanned_last_name: '' });
       if(manual) toast('No passport details found on this document');
       return;
     }
@@ -3133,7 +3140,8 @@ async function scanPassport(source, ref, manual=false){
     }
 
     // Keep the name read from the document, so a difference shows whenever this applicant is opened later
-    if(extracted.first_name || extracted.last_name){
+    // (saved even when blank, so "never read" and "no name on the document" can be told apart)
+    {
       const sf = nameCase(extracted.first_name||''), sl = nameCase(extracted.last_name||'');
       const c = editableCache[ref]||{};
       if(c.scanned_first_name !== sf || c.scanned_last_name !== sl) setNYData(ref, { scanned_first_name: sf, scanned_last_name: sl });
