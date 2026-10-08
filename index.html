@@ -3362,6 +3362,8 @@ async function rmsRateTypeId(client){
 async function rmsBookingSourceId(client, source){
   if(!source) return 0;
   const list = (await rmsLookup(client, '/bookingSources')).filter(b => !b.inactive);
+  // Applications from the Boston / NY booking engines are "Website" in RMS (not RMS's own "Booking Engine" source)
+  if(/booking engine/i.test(source)) source = 'Website';
   const tries = [source, source.split(' - ')[0]].map(rmsNorm);
   for(const t of tries){ const hit = list.find(b => rmsNorm(b.name) === t); if(hit) return hit.id; }
   return 0;
