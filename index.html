@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='2' y='2' width='96' height='96' rx='22' fill='%23ff8686'/><text x='50' y='66' text-anchor='middle' font-family='Arial,Helvetica,sans-serif' font-size='46' font-weight='800' fill='%231e2847' letter-spacing='-2'>RU</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Heritage Collection · Round Up Summary Dashboard</title>
+<title>Heritage Collection · Round Up Dashboard</title>
 <!-- v2.3.2 -->
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -62,6 +62,7 @@ html,body{height:100%;font-family:'Inter',sans-serif;font-size:14px;color:var(--
 #sidebar{width:var(--sb-w);background:var(--sb);display:flex;flex-direction:column;flex-shrink:0}
 .sb-logo{padding:20px 20px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
 .sb-brand{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:500;color:#FFF;letter-spacing:.1em;text-transform:uppercase;line-height:1.2}
+.sb-sub{margin-top:6px;font-family:Inter,sans-serif;font-size:10.5px;font-weight:600;color:#ff8686;letter-spacing:.14em;text-transform:uppercase}
 
 /* PROPERTY SWITCHER */
 .prop-switch{display:flex;margin:12px 12px 4px;background:rgba(0,0,0,.2);border-radius:7px;padding:3px;gap:3px}
@@ -226,7 +227,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="login-screen" style="position:fixed;inset:0;background:#1e2847;display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column">
   <div class="lc">
     <div class="l-brand">Heritage Collection</div>
-    <div class="l-prop">New York & Boston Dashboard</div>
+    <div class="l-prop">Round Up Dashboard · New York & Boston</div>
     <div class="sb-who">Who are you?</div>
     <div class="staff-grid">
       <button class="sb-btn" onclick="selectStaffForPin('Charlotte')">Charlotte</button>
@@ -246,7 +247,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="l-card" style="text-align:center">
     <div class="l-logo">HC</div>
     <div class="l-title">Heritage Collection</div>
-    <div class="l-prop">Two-Factor Authentication</div>
+    <div class="l-prop">Round Up Dashboard · Two-Factor Authentication</div>
     <div style="font-size:13px;color:var(--t3);margin:16px 0 8px" id="otp-msg">A 6-digit code has been sent to your email.</div>
     <input id="otp-input" type="text" maxlength="6" placeholder="000000"
       style="width:180px;text-align:center;font-size:24px;letter-spacing:8px;border:2px solid var(--border);border-radius:8px;padding:12px;font-family:Inter,sans-serif;outline:none;margin-bottom:12px"
@@ -261,6 +262,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="staff-screen" style="display:none;position:fixed;inset:0;background:#1e2847;align-items:center;justify-content:center;z-index:998;flex-direction:column">
   <div class="lc">
     <div class="l-brand">Heritage Collection</div>
+    <div class="l-prop" style="margin-bottom:2px">Round Up Dashboard</div>
     <div class="l-prop" id="pin-who-label">Enter your PIN</div>
     <div class="pin-dots">
       <div class="pd" id="pd0"></div><div class="pd" id="pd1"></div>
@@ -282,6 +284,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <aside id="sidebar">
     <div class="sb-logo">
       <div class="sb-brand">Heritage Collection</div>
+      <div class="sb-sub">Round Up Dashboard</div>
     </div>
     <div class="prop-switch">
       <div class="ps-btn active" id="ps-boston" onclick="switchProperty('boston')">Boston</div>
