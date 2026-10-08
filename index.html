@@ -3863,9 +3863,16 @@ async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=
   const sameName = g => norm(g.guestSurname) === norm(applicant.last_name) && firstGiven(g.guestGiven) === firstGiven(applicant.first_name);
   let match = null;
   if(email && email.includes('@')){
-    const searchData = await rmsCall('/guests/search?modelType=basic', 'POST', { email: applicant.email }, client);
-    const results = Array.isArray(searchData) ? searchData : searchData.result||[];
-    for(const r of results.slice(0,10)){
+    // RMS's email search only returns one profile even when several share an email,
+    // so also look up by surname + first given name, then keep only exact-email matches
+    const list = r => Array.isArray(r) ? r : (r && r.result) || [];
+    const [byEmail, byName] = await Promise.all([
+      rmsCall('/guests/search?modelType=basic', 'POST', { email: applicant.email }, client).then(list).catch(()=>[]),
+      rmsCall('/guests/search?modelType=basic', 'POST', { surname: String(applicant.last_name||'').trim(), given: firstGiven(applicant.first_name) }, client).then(list).catch(()=>[]),
+    ]);
+    const seen = new Set();
+    const results = [...byEmail, ...byName].filter(r => r && r.id && !seen.has(r.id) && seen.add(r.id));
+    for(const r of results.slice(0,15)){
       try{
         const g = await rmsCall(`/guests/${parseInt(r.id)}?modelType=full`, 'GET', null, client);
         const full = Array.isArray(g) ? g[0] : g;
