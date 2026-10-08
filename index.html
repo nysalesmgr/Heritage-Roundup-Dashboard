@@ -3852,19 +3852,24 @@ async function rmsLoadCategories(){
 
 async function rmsSearchOrCreateGuest(client, applicant, idType='', guestStatus=''){
   // Search first
-  const searchData = await rmsCall('/guests/search?modelType=basic', 'POST',
-    { email: applicant.email, given: applicant.first_name, surname: applicant.last_name }, client);
-  const results = Array.isArray(searchData) ? searchData : searchData.result||[];
-  const details = await rmsGuestDetails(client, applicant, idType);
-  // Only reuse an RMS guest whose email matches exactly — never a different person with the same name
+  // Reuse an RMS guest only when the EMAIL matches exactly AND it's the same name.
+  // Never merge on name alone (similar names are common); a different email = a new profile.
+  // Same name check is forgiving about extra given names: "Jonia Lim" = "Jonia Wen Yu Lim" (same surname + first given name),
+  // and two different people sharing one email (e.g. a parent's) stay separate.
   const email = String(applicant.email||'').trim().toLowerCase();
+  const details = await rmsGuestDetails(client, applicant, idType);
+  const norm = v => String(v||'').trim().toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ');
+  const firstGiven = v => norm(v).split(' ')[0] || '';
+  const sameName = g => norm(g.guestSurname) === norm(applicant.last_name) && firstGiven(g.guestGiven) === firstGiven(applicant.first_name);
   let match = null;
   if(email && email.includes('@')){
-    for(const r of results.slice(0,5)){
+    const searchData = await rmsCall('/guests/search?modelType=basic', 'POST', { email: applicant.email }, client);
+    const results = Array.isArray(searchData) ? searchData : searchData.result||[];
+    for(const r of results.slice(0,10)){
       try{
         const g = await rmsCall(`/guests/${parseInt(r.id)}?modelType=full`, 'GET', null, client);
         const full = Array.isArray(g) ? g[0] : g;
-        if(String(full.email||'').trim().toLowerCase() === email){ match = full; break; }
+        if(String(full.email||'').trim().toLowerCase() === email && sameName(full)){ match = full; break; }
       }catch(e){ console.warn('Guest check failed:', e.message); }
     }
   }
