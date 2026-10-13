@@ -1820,7 +1820,7 @@ function setNYData(ref, data){
   const before = { ...(editableCache[ref]||{}) };
   editableCache[ref] = { ...before, ...data };
   // Only send known columns to Supabase
-  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','first_name','last_name','scanned_first_name','scanned_last_name','updated_at'];
+  const allowed = ['ref_number','property','unit','move_in','move_out','monthly_rent','incentives','vmu','ipt','student_status','prev_accommodation','season','lead_source','reservation_no','agr_date','payment_due','remarks','formsite_status','dob','nationality','gender','id_type','payment_plan','passport_number','passport_expiry','doc_scanned_at','first_name','last_name','scanned_first_name','scanned_last_name','uploaded_docs','updated_at'];
   // Send only the fields that changed (so one person's save can't undo another's), and keep the
   // record's own property even if the view was switched while this save was pending
   const prop = (apps.find(x=>x.ref_number===ref)||{})._property || before.property || currentProperty;
@@ -1839,7 +1839,7 @@ function setNYData(ref, data){
 
   // Log each changed field to audit history (skip internal/status fields)
   Object.keys(data).forEach(k => {
-    if(k === 'formsite_status') return; // status changes logged separately via setStatus
+    if(k === 'formsite_status' || k === 'uploaded_docs') return; // logged separately (setStatus / staff upload)
     const label = FIELD_LABELS[k] || k;
     const oldVal = before[k] || '(blank)';
     const newVal = data[k] || '(blank)';
@@ -2282,6 +2282,11 @@ function openPanel(ref){
     docHtml += docs.filter(([,u])=>u).map(([l,u])=>docRow(l,u)).join('');
     if(!docHtml) docHtml = '<div style="color:var(--t3);font-size:12px;font-style:italic">No document links in this submission.</div>';
   }
+  {
+    const ups = STAFF_DOC_TYPES.map(([t,l]) => [l, uploadedDoc(a, t)]).filter(([,d]) => d);
+    if(ups.length) docHtml = `<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#15803d;margin-bottom:10px">Newer copies (used for scan &amp; RMS)</div>` + ups.map(([l,d]) => staffDocRow(l, d)).join('') + '<div style="height:8px"></div>' + docHtml;
+    docHtml += staffUploadForm(a);
+  }
   document.getElementById('t-docs-list').innerHTML = docHtml;
 
   // Remarks tab
@@ -2555,6 +2560,7 @@ function closeLinkStatusModal(){ document.getElementById('link-status-modal').st
 
 // ── DATA CHECKS (also run after every load; a "!" on Run Diagnostics means one failed) ──
 function appDocUrls(a){
+  if(Object.keys(uploadedDocs(a)).length) return ['(uploaded)'];
   let occ = []; try{ occ = JSON.parse((a.raw_data||{}).occupants_details||'[]'); }catch(e){}
   const o = a._parent_ref ? null : occ[0];
   return [a.passport_1_url || a.license_url || o?.driver_license_url, a.i20_1_url, a.visa_1_url,
@@ -3008,7 +3014,68 @@ function editPanelField(elId, field, el){
 }
 // ── DOCUMENT SCANNING (Supabase Storage + Google Vision) ─
 // Where to read the passport from: a stored copy in Supabase Storage, or the uploaded file's link
+// ── STAFF-UPLOADED DOCUMENTS (a newer copy replaces the form's file everywhere) ──
+const STAFF_DOC_TYPES = [['passport','Passport / ID'],['enrollment','Enrollment Letter'],['internship','Internship Letter'],['i20','I-20'],['visa','Visa'],['other','Other']];
+function uploadedDocs(a){ const u = (editableCache[a.ref_number]||{}).uploaded_docs; return u && typeof u === 'object' ? u : {}; }
+function uploadedDoc(a, type){ const d = uploadedDocs(a)[type]; return d && d.bucket && d.path ? d : null; }
+async function docUploadCall(body){
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/doc-upload`, {
+    method:'POST', headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization':'Bearer '+SUPABASE_KEY }, body: JSON.stringify(body)
+  });
+  let j = {}; try{ j = await res.json(); }catch(e){}
+  if(!res.ok || j.error) throw new Error(j.error || ('HTTP ' + res.status));
+  return j;
+}
+async function openStoredDoc(bucket, path){
+  const w = window.open('', '_blank');
+  try{ const { url } = await docUploadCall({ action:'sign', bucket, path }); if(w) w.location = url; else window.open(url, '_blank'); }
+  catch(e){ if(w) w.close(); toast('⚠️ Could not open the file: ' + e.message); }
+}
+function staffDocRow(label, d){
+  const when = d.at ? fmtDatePlain(d.at.slice(0,10)) : '';
+  return `<div style="margin-bottom:10px"><div class="il-l">${esc(label)} <span style="font-weight:600;color:#15803d;text-transform:none;letter-spacing:0">· newer copy</span></div>
+    <div class="il-v"><a href="#" onclick="openStoredDoc('${escJs(d.bucket)}','${escJs(d.path)}');return false">View file ↗</a>
+    <span style="font-size:11px;color:var(--t3);margin-left:6px">uploaded${d.by ? ' by ' + esc(d.by) : ''}${when ? ' on ' + esc(when) : ''}</span></div></div>`;
+}
+function staffUploadForm(a){
+  return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+    <div class="il-l" style="margin-bottom:6px">Upload a newer copy</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <select id="staff-doc-type" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;font-family:Inter,sans-serif">
+        ${STAFF_DOC_TYPES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
+      </select>
+      <input id="staff-doc-file" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" style="font-size:12px;max-width:220px">
+      <button onclick="uploadStaffDoc('${escJs(a.ref_number)}')" id="staff-doc-btn" style="font-size:12px;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-family:Inter,sans-serif">Upload</button>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:4px">PDF, JPG or PNG, up to 10 MB. Replaces the form's copy for viewing, ID scan and RMS.</div>
+  </div>`;
+}
+async function uploadStaffDoc(ref){
+  const a = apps.find(x=>x.ref_number===ref); if(!a) return;
+  const type = document.getElementById('staff-doc-type').value;
+  const file = document.getElementById('staff-doc-file').files[0];
+  if(!file){ toast('Choose a file first'); return; }
+  const ext = (file.name.split('.').pop()||'').toLowerCase();
+  if(!['pdf','jpg','jpeg','png'].includes(ext)){ toast('⚠️ Only PDF, JPG or PNG files'); return; }
+  if(file.size > 10*1024*1024){ toast('⚠️ File is larger than 10 MB'); return; }
+  const btn = document.getElementById('staff-doc-btn'); btn.disabled = true; btn.textContent = 'Uploading…';
+  try{
+    const base64 = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = bad; r.readAsDataURL(file); });
+    const bucket = (a._property || currentProperty) === 'boston' ? 'boston-applications' : 'ny-applications';
+    const { path } = await docUploadCall({ action:'upload', bucket, ref, doc_type: type, ext, base64 });
+    const docs = { ...uploadedDocs(a), [type]: { bucket, path, name: file.name, by: currentStaff || '', at: new Date().toISOString() } };
+    setNYData(ref, { uploaded_docs: docs });
+    const label = (STAFF_DOC_TYPES.find(t=>t[0]===type)||[])[1] || type;
+    insertHistory(ref, 'field', `📎 ${label}: newer copy uploaded (${file.name})`);
+    toast(`✓ ${label} uploaded`);
+    if(selectedRef === ref) openPanel(ref);
+    if(type === 'passport'){ await scanPassport({ storage_path: path, bucket }, ref, true); }
+  }catch(e){ toast('⚠️ Upload failed: ' + e.message); }
+  finally{ const b = document.getElementById('staff-doc-btn'); if(b){ b.disabled = false; b.textContent = 'Upload'; } }
+}
 function passportScanSource(a){
+  const up = uploadedDoc(a, 'passport');
+  if(up) return { storage_path: up.path, bucket: up.bucket };
   const raw = a.raw_data || {};
   const path = raw.stored_passport || raw.stored_license || '';
   if(path && !path.startsWith('http')){
@@ -3919,22 +3986,27 @@ const idTypeOf = app => getNYData(app.ref_number).id_type || (app.passport_1_url
 
 // Attach an applicant's documents to an RMS reservation
 async function rmsUploadDocs(client, resId, app){
+  // A newer copy uploaded by staff replaces the form's file of the same kind
+  const up = t => uploadedDoc(app, t);
+  const extOf = u => { const m = String(u||'').toLowerCase().match(/\.(pdf|png|jpe?g)(?:$|\?)/); return m ? (m[1]==='jpeg'?'jpg':m[1]) : 'jpg'; };
+  const pick = (type, url, base, note) => { const d = up(type); return d ? { src:{ storage_path:d.path, bucket:d.bucket }, key:d.path, name: base + '.' + extOf(d.path), note } : (url ? { src:{ url }, key:url, name: base + '.' + extOf(url), note } : null); };
   const all = [
-    { url: app.passport_1_url, name: 'Passport.jpg', note: 'Passport' },
-    { url: app.license_url,    name: 'DriverLicense.jpg', note: 'Driver License' },
-    { url: app.i20_1_url,      name: 'I20.jpg', note: 'I-20' },
-    { url: app.visa_1_url,     name: 'Visa.jpg', note: 'Visa' },
-    { url: app.enrollment_url, name: 'EnrollmentLetter.jpg', note: 'Enrollment Letter' },
-    { url: app.internship_url, name: 'InternshipOffer.jpg', note: 'Internship Offer Letter' },
-  ].filter(x => x.url);
+    up('passport') ? pick('passport', '', 'Passport', 'Passport / ID') : pick('-', app.passport_1_url, 'Passport', 'Passport'),
+    up('passport') ? null : pick('-', app.license_url, 'DriverLicense', 'Driver License'),
+    pick('i20', app.i20_1_url, 'I20', 'I-20'),
+    pick('visa', app.visa_1_url, 'Visa', 'Visa'),
+    pick('enrollment', app.enrollment_url, 'EnrollmentLetter', 'Enrollment Letter'),
+    pick('internship', app.internship_url, 'InternshipOffer', 'Internship Offer Letter'),
+    up('other') ? pick('other', '', 'Other', 'Other document') : null,
+  ].filter(Boolean);
   const seen = new Set();
-  const docs = all.filter(x => { if(seen.has(x.url)) return false; seen.add(x.url); return true; });
+  const docs = all.filter(x => { if(seen.has(x.key)) return false; seen.add(x.key); return true; });
   let n = 0;
   for(const doc of docs){
     try{
       const scanRes = await fetch(`${SUPABASE_URL}/functions/v1/doc-scan`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
-        body: JSON.stringify({ url: doc.url, mode: 'upload' })
+        body: JSON.stringify({ ...doc.src, mode: 'upload' })
       });
       const { base64 } = await scanRes.json();
       if(!base64) continue;
