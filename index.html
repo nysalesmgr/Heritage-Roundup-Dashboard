@@ -608,8 +608,8 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <div><div class="il-l">Address</div><div class="il-v" id="t-address">—</div></div>
           <div><div class="il-l">Course</div><div class="il-v" id="t-course">—</div></div>
           <div><div class="il-l">How They Found Us</div><div class="il-v" id="t-referral">—</div></div>
-          <div><div class="il-l">Passport Number</div><div class="il-v" id="t-passport-num">—</div></div>
-          <div><div class="il-l">Passport Expiry</div><div class="il-v" id="t-passport-exp">—</div></div>
+          <div><div class="il-l">Passport / ID Number</div><div class="il-v editable-field" id="t-passport-num" onclick="editPanelFieldEditable('t-passport-num','passport_number',this,'text')" style="cursor:pointer" title="Click to correct">—</div></div>
+          <div><div class="il-l">Passport / ID Expiry</div><div class="il-v editable-field" id="t-passport-exp" onclick="editPanelFieldEditable('t-passport-exp','passport_expiry',this,'date')" style="cursor:pointer" title="Click to correct">—</div></div>
           <div><div class="il-l">Date of Birth</div><div class="il-v editable-field" id="t-dob" onclick="editPanelFieldEditable('t-dob','dob',this,'date')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Nationality</div><div class="il-v editable-field" id="t-nationality" onclick="editPanelFieldEditable('t-nationality','nationality',this,'text')" style="cursor:pointer">—</div></div>
           <div><div class="il-l">Gender</div><div class="il-v editable-field" id="t-gender" onclick="editGender(this)" style="cursor:pointer">—</div></div>
@@ -2966,7 +2966,8 @@ function editPanelFieldEditable(elId, field, el, type){
   input.style.cssText='width:100%;border:1.5px solid var(--coral);border-radius:4px;padding:3px 6px;font-size:13px;font-family:Inter,sans-serif;outline:none';
   el.innerHTML=''; el.appendChild(input); input.focus();
   const save = () => {
-    const val = input.value.trim();
+    let val = input.value.trim();
+    if(field === 'passport_number') val = val.toUpperCase().replace(/\s+/g,'');
     el.innerHTML = val ? (type==='date' ? fmtDate(val) : esc(val)) : '—';
     if(val === (type==='date' ? rmsISODate(cur) : cur)) return; // nothing changed
     setNYData(selectedRef, {[field]: val});
@@ -3224,7 +3225,9 @@ async function scanPassport(source, ref, manual=false){
     const pUpd = {};
     const curNum = (editableCache[ref]||{}).passport_number || a.passport_number || '';
     const curExp = (editableCache[ref]||{}).passport_expiry || a.passport_expiry || '';
-    if(extracted.document_number && extracted.document_number !== String(curNum).trim().toUpperCase()){
+    // A staff correction of a misread look-alike character (O/0, I/1/L, S/5, B/8, Z/2) is kept on later scans
+    const ocrSame = (x, y) => { const f = v => String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/O/g,'0').replace(/[IL]/g,'1').replace(/S/g,'5').replace(/B/g,'8').replace(/Z/g,'2'); return f(x) === f(y); };
+    if(extracted.document_number && extracted.document_number !== String(curNum).trim().toUpperCase() && !ocrSame(extracted.document_number, curNum)){
       pUpd.passport_number = extracted.document_number;
       if(curNum) insertHistory(ref, 'field', `✏️ Passport Number: "${curNum}" → "${extracted.document_number}" (from document)`);
     }
