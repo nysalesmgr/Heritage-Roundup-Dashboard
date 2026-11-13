@@ -3725,6 +3725,31 @@ function rmsMatchArea(areas, unit){
   const partial = areas.filter(x => { const n = rmsNorm(x.name); return n.length >= 2 && (n.endsWith(u) || u.endsWith(n)); });
   return partial.length === 1 ? partial[0] : null;
 }
+// An apartment booked by the room: "152 3R" (NY) has rooms "152 3RL" / "152 3RR"; "922 105" has "922 105L" / "922 105R".
+// Counts only when both rooms exist and the apartment itself isn't a bookable unit (missing or inactive in RMS).
+function rmsAptRooms(all, unit){
+  const u = rmsNorm(unit);
+  if(!u || !all || !all.length) return null;
+  const L = all.find(x => rmsNorm(x.name) === u + 'l' && !x.inactive);
+  const R = all.find(x => rmsNorm(x.name) === u + 'r' && !x.inactive);
+  if(!L || !R) return null;
+  const whole = all.find(x => rmsNorm(x.name) === u);
+  if(whole && !whole.inactive) return null;
+  return { L, R };
+}
+// Which room of the apartment this applicant should get: the second person on a form, or someone whose
+// room-mate already has the L room, gets R; everyone else gets L. Falls back to the other room if it's taken.
+function rmsPickAptRoom(a, rooms, free){
+  const isFree = r => free.some(x => String(x.id) === String(r.id));
+  const mates = getLinkedRefs(a.ref_number).map(r => apps.find(x=>x.ref_number===r)).filter(Boolean);
+  const mateInL = mates.some(m => rmsNorm(rmsDashboardUnit(m)) === rmsNorm(rooms.L.name));
+  const mateInR = mates.some(m => rmsNorm(rmsDashboardUnit(m)) === rmsNorm(rooms.R.name));
+  const preferR = !!a._parent_ref || mateInL;
+  const first = preferR ? rooms.R : rooms.L, other = preferR ? rooms.L : rooms.R;
+  if(isFree(first)) return first;
+  if(!mateInL && !mateInR && isFree(other)) return other;
+  return null;
+}
 let rmsAreaCache = {}; // "<client>|<propertyId>" -> all areas for that property
 let rmsAreaCacheTime = Date.now();
 async function rmsAllAreas(client, propId){
@@ -3789,9 +3814,21 @@ async function rmsLoadAreas(){
     });
     // Pre-select the dashboard's unit if it's free
     const unit = rmsDashboardUnit(a);
-    const match = unit ? rmsMatchArea(areas, unit) : null;
-    const booked = match ? null : rmsPickBookedArea(a, areas);
-    if(match){
+    const rooms = unit ? rmsAptRooms(await rmsAllAreas(client, propId).catch(()=>[]), unit) : null;
+    const room = rooms ? rmsPickAptRoom(a, rooms, areas) : null;
+    const match = rooms ? null : unit ? rmsMatchArea(areas, unit) : null;
+    const booked = (match || rooms) ? null : rmsPickBookedArea(a, areas);
+    if(room){
+      areaSel.value = String(room.id);
+      const mate = getLinkedRefs(a.ref_number).map(r=>apps.find(x=>x.ref_number===r))
+        .find(x => x && !getNYData(x.ref_number).reservation_no && rmsNorm(rmsDashboardUnit(x)) === rmsNorm(unit));
+      const otherRoom = room === rooms.L ? rooms.R : rooms.L;
+      rmsUnitHint(`✓ Dashboard unit "${unit}" → room ${room.name}`
+        + (mate ? ` · ${mate.first_name||''} ${mate.last_name||''} → ${otherRoom.name} (second booking)` : '')
+        + ' — free for these dates.', '#15803d');
+    } else if(rooms){
+      rmsUnitHint(`⚠️ Dashboard unit "${unit}" — rooms ${rooms.L.name} / ${rooms.R.name} aren't free for these dates. Pick a unit.`, '#b45309');
+    } else if(match){
       areaSel.value = String(match.id);
       rmsUnitHint(`✓ Matched dashboard unit "${unit}" — available for these dates.`, '#15803d');
     } else if(booked && booked.area){
@@ -3843,7 +3880,7 @@ function rmsPickBookedArea(a, free){
   // Room-mate already placed in a room (e.g. applied first through Formsite): take the other room of that apartment
   for(const r of getLinkedRefs(a.ref_number)){
     const la = apps.find(x=>x.ref_number===r);
-    const m = la && rmsDashboardUnit(la).match(/^(.*\d)\s*([LR])$/i);
+    const m = la && rmsDashboardUnit(la).match(/^(.*\d[A-Z]?)\s*([LR])$/i);
     if(m){
       const other = byName(m[1] + (m[2].toUpperCase()==='L' ? 'R' : 'L'));
       if(other) return { area: other, apt: m[1], roommate: la };
@@ -3899,7 +3936,9 @@ async function rmsLoadCategories(){
     const unit = rmsDashboardUnit(a);
     if(unit){
       try{
-        const match = rmsMatchArea(await areasP, unit);
+        const all = await areasP;
+        const rooms = rmsAptRooms(all, unit);
+        const match = rooms ? rooms.L : rmsMatchArea(all, unit);
         if(match && [...catSel.options].some(o=>o.value===String(match.categoryId))){
           catSel.value = String(match.categoryId);
           await rmsLoadAreas();
@@ -4069,7 +4108,7 @@ async function rmsCreateReservation(){
 
     // Two people on one booking engine form, booked into a two-bedroom: each gets their own room (L / R)
     const areaName = document.getElementById('rms-area').selectedOptions[0]?.textContent || '';
-    const roomSide = areaName.trim().match(/^(.*\d)([LR])$/i);
+    const roomSide = areaName.trim().match(/^(.*\d[A-Z]?)([LR])$/i);
     // Only a real L / R room pair counts: "235 5R" is a whole apartment (R = rear), so check the other room exists in RMS
     let roomPair = false;
     if(roomSide){
@@ -4087,6 +4126,8 @@ async function rmsCreateReservation(){
         }
       }
     }
+
+    if(roomSide && roomPair && rmsNorm(rmsDashboardUnit(a)) === rmsNorm(roomSide[1])) setNYData(a.ref_number, { unit: areaName.trim() });
 
     // Linked applicant in a different unit → a second booking (checked before anything is created)
     const second = await rmsSecondBooking(rmsClient, propId, a, areaId);
