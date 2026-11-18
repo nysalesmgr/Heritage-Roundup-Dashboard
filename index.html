@@ -1767,12 +1767,12 @@ function renderWeeklyPage(){
         <td>${esc(rent||'—')}</td>
         <td>${wkDates(d.vmu)}</td>
         <td>${wkDates(d.ipt)}</td>
-        <td class="wk-rem" data-ref="${esc(a.ref_number)}"><span class="wk-zero">Loading…</span></td>
-        <td class="wk-rem wk-fomo" data-ref="${esc(a.ref_number)}"><span class="wk-zero">Loading…</span></td>
+        <td class="wk-rem" data-ref="${esc(a.ref_number)}" onclick="event.stopPropagation();openPanel('${escJs(a.ref_number)}');switchTab('remarks')" style="cursor:pointer"><span class="wk-zero">Loading…</span></td>
+        <td class="wk-rem wk-fomo" data-ref="${esc(a.ref_number)}" onclick="event.stopPropagation();openPanel('${escJs(a.ref_number)}');switchTab('fomo')" style="cursor:pointer"><span class="wk-zero">Loading…</span></td>
         <td>${form}<div class="wk-sub2">${esc(String(d.lead_source || a.formsite_source || '').trim() || '—')}</div></td>
         <td>${fmtDate(a.created_at)}</td></tr>`;
     };
-    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>VMU</th><th>IPT</th><th>Remarks</th><th>FOMO!</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
+    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>VMU</th><th>IPT</th><th>VMU/IPT Remarks</th><th>FOMO!</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
   };
   const num = (v, color) => v ? `<span class="wk-pill" style="background:${color}">${v}</span>` : '<span class="wk-zero">0</span>';
   const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
