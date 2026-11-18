@@ -175,6 +175,7 @@ td.note-cell{min-width:170px;max-width:240px;white-space:normal;cursor:pointer;v
 .wk-people td:first-child{white-space:normal;min-width:170px}.wk-sub2{font-size:11px;color:var(--t3);margin-top:2px;white-space:normal}
 .wk-rem{min-width:220px;max-width:340px;white-space:normal!important}.wk-remtxt{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .wk-toggle{cursor:pointer;user-select:none}.wk-toggle .wk-arrow{display:inline-block;width:14px;margin:0;font-size:13px;color:var(--t1)}
+.wk-tbl tr.wk-more td{cursor:pointer;text-align:left;font-weight:600;color:var(--navy);font-size:12.5px;background:rgba(100,116,139,.04)}
 .wk-tag{margin-left:8px;font-size:10px;background:#dcfce7;color:#166534;border-radius:10px;padding:1px 7px;font-weight:600}
 .tl-dot.pendingvmu{background:var(--vmu)}.tl-dot.pendingipt{background:var(--ipt)}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
@@ -487,7 +488,7 @@ td.note-cell{min-width:170px;max-width:240px;white-space:normal;cursor:pointer;v
         <button class="btn" style="background:var(--navy);color:#fff" onclick="downloadWeeklyCSV()">⬇ Download Excel / CSV</button></div>
       <div class="pc">
         <div class="wk-cards" id="wk-cards"></div>
-        <div class="wk-h">Status now <span>where each week's applications stand today · click a week to see who applied</span></div>
+        <div class="wk-h">Status now <span>last 4 weeks · click a week to see who applied</span></div>
         <div class="tc tc-scroll" style="margin-bottom:22px"><table class="wk-tbl" id="wk-status"></table></div>
         <div class="wk-h wk-toggle" onclick="const t=document.getElementById('wk-form-wrap');const open=t.style.display==='none';t.style.display=open?'':'none';this.querySelector('.wk-arrow').textContent=open?'▾':'▸'"><span class="wk-arrow">▸</span> Form &amp; where from <span>click to show · then click a week to see where the applications came from</span></div>
         <div class="tc tc-scroll" id="wk-form-wrap" style="display:none"><table class="wk-tbl" id="wk-form"></table></div>
@@ -1732,6 +1733,16 @@ async function loadWeekRemarks(row){
     cells.forEach(c => c.innerHTML = '<span class="wk-zero">Couldn\'t load</span>');
   }
 }
+// Status now shows the last 4 weeks; older weeks open with the arrow
+function toggleOlderWeeks(tr){
+  const open = tr.dataset.open !== '1';
+  tr.dataset.open = open ? '1' : '';
+  document.querySelectorAll('#wk-status tr.wk-old').forEach(r => r.style.display = open ? '' : 'none');
+  // closing also folds away any applicant list opened under an older week
+  if(!open) document.querySelectorAll('#wk-status tr.wk-old + tr.wk-detail').forEach(r => r.style.display = 'none');
+  const n = document.querySelectorAll('#wk-status tr.wk-old').length;
+  tr.querySelector('td').innerHTML = `<span class="wk-arrow">${open?'▾':'▸'}</span> ${open ? 'Hide earlier weeks' : 'Show earlier weeks (' + n + ')'}`;
+}
 function renderWeeklyPage(){
   const W = weeklyData();
   const city = currentProperty === 'boston' ? 'Boston' : 'New York';
@@ -1779,8 +1790,9 @@ function renderWeeklyPage(){
   const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
   document.getElementById('wk-status').innerHTML =
     `<thead><tr><th>Week (Mon – Sun)</th>${WK_GROUPS.map(g=>`<th style="color:${g[2]}" title="${g[3]}">${g[1]}</th>`).join('')}<th>Total</th><th>% Completed</th></tr></thead><tbody>` +
-    W.map((w,i) => `<tr class="wk-row ${w.cur?'wk-cur':''}" onclick="const d=document.getElementById('wk-p${i}');d.style.display=d.style.display==='none'?'':'none';if(d.style.display==='')loadWeekRemarks(d)"><td>${w.total?'▸ ':''}${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>
+    W.map((w,i) => `<tr class="wk-row ${w.cur?'wk-cur':''}${i>=4?' wk-old':''}" ${i>=4?'style="display:none"':''} onclick="const d=document.getElementById('wk-p${i}');d.style.display=d.style.display==='none'?'':'none';if(d.style.display==='')loadWeekRemarks(d)"><td>${w.total?'▸ ':''}${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>
       <tr class="wk-detail" id="wk-p${i}" style="display:none"><td colspan="${WK_GROUPS.length+3}">${w.total ? people(w) : 'No applications this week.'}</td></tr>`).join('') +
+    (W.length > 4 ? `<tr class="wk-more" onclick="toggleOlderWeeks(this)"><td colspan="${WK_GROUPS.length+3}"><span class="wk-arrow">▸</span> Show earlier weeks (${W.length-4})</td></tr>` : '') +
     `<tr class="wk-all"><td>All weeks</td>${WK_GROUPS.map(g=>`<td style="color:${g[2]}">${sum(g[0])}</td>`).join('')}<td class="tot">${total}</td><td>${wkPct(sum('done'),total)}</td></tr></tbody>`;
   const z = v => v ? v : '<span class="wk-zero">0</span>';
   document.getElementById('wk-form').innerHTML =
