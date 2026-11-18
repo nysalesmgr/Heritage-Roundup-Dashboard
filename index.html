@@ -4032,7 +4032,17 @@ async function rmsUploadDocs(client, resId, app){
   // A newer copy uploaded by staff replaces the form's file of the same kind
   const up = t => uploadedDoc(app, t);
   const extOf = u => { const m = String(u||'').toLowerCase().match(/\.(pdf|png|jpe?g)(?:$|\?)/); return m ? (m[1]==='jpeg'?'jpg':m[1]) : 'jpg'; };
-  const pick = (type, url, base, note) => { const d = up(type); return d ? { src:{ storage_path:d.path, bucket:d.bucket }, key:d.path, name: base + '.' + extOf(d.path), note } : (url ? { src:{ url }, key:url, name: base + '.' + extOf(url), note } : null); };
+  // Each file is named after its owner, so when several people's documents sit on one booking (the L room,
+  // or a shared studio) staff can tell them apart: "Passport_Jonia_Lim.jpg", note "Passport — Jonia Lim"
+  const person = [app.first_name, app.last_name].map(v => String(v||'').trim()).filter(Boolean).join(' ');
+  const fileTag = person.normalize('NFKD').replace(/[^A-Za-z0-9 -]/g, '').trim().replace(/[\s-]+/g, '_').slice(0, 60);
+  const named = (base, ext) => base + (fileTag ? '_' + fileTag : '') + '.' + ext;
+  const pick = (type, url, base, label) => {
+    const note = person ? label + ' — ' + person : label;
+    const d = up(type);
+    return d ? { src:{ storage_path:d.path, bucket:d.bucket }, key:d.path, name: named(base, extOf(d.path)), note }
+             : (url ? { src:{ url }, key:url, name: named(base, extOf(url)), note } : null);
+  };
   const all = [
     up('passport') ? pick('passport', '', 'Passport', 'Passport / ID') : pick('-', app.passport_1_url, 'Passport', 'Passport'),
     up('passport') ? null : pick('-', app.license_url, 'DriverLicense', 'Driver License'),
