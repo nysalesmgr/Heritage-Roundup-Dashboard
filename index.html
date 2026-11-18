@@ -159,7 +159,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .wk-h{font-size:14px;font-weight:700;margin:6px 0 10px}.wk-h span{font-weight:400;font-size:12px;color:var(--t3);margin-left:6px}
 .wk-tbl{width:100%;min-width:620px}.wk-tbl th,.wk-tbl td{text-align:center}.wk-tbl th:first-child,.wk-tbl td:first-child{text-align:left}
 .wk-tbl td.tot{font-weight:700}.wk-tbl tr.wk-cur td{background:rgba(22,163,74,.07);font-weight:600}
-.wk-tbl tr.wk-row{cursor:pointer}.wk-tbl tr.wk-detail td{text-align:left;font-size:12px;color:var(--t3);white-space:normal;background:rgba(100,116,139,.05)}
+.wk-tbl tr.wk-row{cursor:pointer}.wk-tbl tr.wk-detail > td{text-align:left;font-size:12px;color:var(--t3);white-space:normal;background:rgba(100,116,139,.05)}
 .wk-pill{display:inline-block;min-width:32px;padding:2px 10px;border-radius:14px;color:#fff;font-weight:700;font-size:13px}
 .wk-zero{color:var(--t3);opacity:.55}
 .wk-person{display:grid;grid-template-columns:minmax(160px,1.2fr) 230px 170px 1fr 100px;gap:10px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--border);color:var(--t2,var(--t1))}
@@ -170,6 +170,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .wk-people th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);font-weight:700;text-align:left!important;padding:4px 8px;background:none}
 .wk-people td{text-align:left!important;color:var(--t1);font-size:12.5px;padding:7px 8px;border-top:1px dashed var(--border);vertical-align:top;white-space:nowrap}
 .wk-people td:first-child{white-space:normal;min-width:170px}.wk-sub2{font-size:11px;color:var(--t3);margin-top:2px;white-space:normal}
+.wk-rem{min-width:220px;max-width:340px;white-space:normal!important}.wk-remtxt{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .wk-tag{margin-left:8px;font-size:10px;background:#dcfce7;color:#166534;border-radius:10px;padding:1px 7px;font-weight:600}
 .tl-dot.pendingvmu{background:var(--vmu)}.tl-dot.pendingipt{background:var(--ipt)}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
@@ -1694,6 +1695,28 @@ function weeklyData(){
   }
   return out;
 }
+// VMU / IPT can hold several dates (one per line)
+const wkDates = v => { const ds = String(v||'').split('\n').map(x=>x.trim()).filter(Boolean); return ds.length ? ds.map(x=>fmtDate(x)).join('<br>') : '—'; };
+// Latest remarks for the applicants in an opened week (loaded when the week is opened)
+async function loadWeekRemarks(row){
+  const cells = [...row.querySelectorAll('td.wk-rem')];
+  if(!cells.length || row.dataset.remLoaded) return;
+  row.dataset.remLoaded = '1';
+  const refs = cells.map(c => c.dataset.ref);
+  try{
+    const res = await sbGet(`/rest/v1/staff_history?select=ref_number,content,staff_name,created_at&entry_type=eq.remark&ref_number=in.(${refs.map(r=>encodeURIComponent('"'+r.replace(/"/g,'')+'"')).join(',')})&order=created_at.desc`);
+    const rows = res.ok ? await res.json() : [];
+    cells.forEach(c => {
+      const mine = rows.filter(h => h.ref_number === c.dataset.ref);
+      if(!mine.length){ c.innerHTML = '<span class="wk-zero">—</span>'; return; }
+      const h = mine[0];
+      c.innerHTML = `<div class="wk-remtxt">${esc(h.content.replace(/^💬 /,''))}</div><div class="wk-sub2">${fmtDate(h.created_at)} · ${esc(h.staff_name||'')}${mine.length > 1 ? ` · +${mine.length-1} earlier` : ''}</div>`;
+    });
+  }catch(e){
+    row.dataset.remLoaded = '';
+    cells.forEach(c => c.innerHTML = '<span class="wk-zero">Couldn\'t load</span>');
+  }
+}
 function renderWeeklyPage(){
   const W = weeklyData();
   const city = currentProperty === 'boston' ? 'Boston' : 'New York';
@@ -1728,16 +1751,19 @@ function renderWeeklyPage(){
         <td>${esc(unit||'—')}</td>
         <td>${mi ? fmtDate(mi) : '—'} – ${mo ? fmtDate(mo) : '—'}</td>
         <td>${esc(rent||'—')}</td>
+        <td>${wkDates(d.vmu)}</td>
+        <td>${wkDates(d.ipt)}</td>
+        <td class="wk-rem" data-ref="${esc(a.ref_number)}"><span class="wk-zero">Loading…</span></td>
         <td>${form}<div class="wk-sub2">${esc(String(d.lead_source || a.formsite_source || '').trim() || '—')}</div></td>
         <td>${fmtDate(a.created_at)}</td></tr>`;
     };
-    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
+    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>VMU</th><th>IPT</th><th>Remarks</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
   };
   const num = (v, color) => v ? `<span class="wk-pill" style="background:${color}">${v}</span>` : '<span class="wk-zero">0</span>';
   const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
   document.getElementById('wk-status').innerHTML =
     `<thead><tr><th>Week (Mon – Sun)</th>${WK_GROUPS.map(g=>`<th style="color:${g[2]}" title="${g[3]}">${g[1]}</th>`).join('')}<th>Total</th><th>% Completed</th></tr></thead><tbody>` +
-    W.map((w,i) => `<tr class="wk-row ${w.cur?'wk-cur':''}" onclick="const d=document.getElementById('wk-p${i}');d.style.display=d.style.display==='none'?'':'none'"><td>${w.total?'▸ ':''}${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>
+    W.map((w,i) => `<tr class="wk-row ${w.cur?'wk-cur':''}" onclick="const d=document.getElementById('wk-p${i}');d.style.display=d.style.display==='none'?'':'none';if(d.style.display==='')loadWeekRemarks(d)"><td>${w.total?'▸ ':''}${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>
       <tr class="wk-detail" id="wk-p${i}" style="display:none"><td colspan="${WK_GROUPS.length+3}">${w.total ? people(w) : 'No applications this week.'}</td></tr>`).join('') +
     `<tr class="wk-all"><td>All weeks</td>${WK_GROUPS.map(g=>`<td style="color:${g[2]}">${sum(g[0])}</td>`).join('')}<td class="tot">${total}</td><td>${wkPct(sum('done'),total)}</td></tr></tbody>`;
   const z = v => v ? v : '<span class="wk-zero">0</span>';
