@@ -166,6 +166,10 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .wk-person:last-child{border-bottom:none}.wk-person .badge{justify-self:start}.wk-pname{font-weight:600;color:var(--navy);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .wk-tbl tr.wk-all td{font-weight:700;border-top:2px solid var(--border);background:rgba(100,116,139,.06)}
 @media (max-width:700px){.wk-person{grid-template-columns:1fr auto}.wk-person span:nth-child(n+3){display:none}}
+.wk-people{width:100%;border-collapse:collapse;font-size:12.5px;color:var(--t1)}
+.wk-people th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);font-weight:700;text-align:left!important;padding:4px 8px;background:none}
+.wk-people td{text-align:left!important;color:var(--t1);font-size:12.5px;padding:7px 8px;border-top:1px dashed var(--border);vertical-align:top;white-space:nowrap}
+.wk-people td:first-child{white-space:normal;min-width:170px}.wk-sub2{font-size:11px;color:var(--t3);margin-top:2px;white-space:normal}
 .wk-tag{margin-left:8px;font-size:10px;background:#dcfce7;color:#166534;border-radius:10px;padding:1px 7px;font-weight:600}
 .tl-dot.pendingvmu{background:var(--vmu)}.tl-dot.pendingipt{background:var(--ipt)}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
@@ -1704,7 +1708,32 @@ function renderWeeklyPage(){
     card('Last week', l.total, l.m ? wkLabel(l) : '');
   const sum = k => W.reduce((n,w)=>n+w[k],0);
   // Who applied that week: name (opens the application), status, form, where from
-  const people = w => w.list.map(a => `<div class="wk-person"><span class="wk-pname" onclick="event.stopPropagation();openPanel('${escJs(a.ref_number)}')">${esc(((a.first_name||'')+' '+(a.last_name||'')).trim() || a.ref_number)}</span>${badge(a.status)}<span>${a._source==='Booking Engine'?'Booking Engine':a._source==='Domestic'?'Formsite Domestic':'Formsite International'}</span><span>${esc(String(getNYData(a.ref_number).lead_source || a.formsite_source || '').trim() || '—')}</span><span>${fmtDate(a.created_at)}</span></div>`).join('');
+  // Who applied that week — a small table with what management needs to see at a glance
+  const people = w => {
+    const be = a => a._source === 'Booking Engine';
+    const row = a => {
+      const d = getNYData(a.ref_number);
+      const unit = d.unit || (be(a) ? aptTitle(a) : '');
+      const mi = d.move_in || (be(a) ? a.start_date : a.formsite_movein) || '';
+      const mo = d.move_out || (be(a) ? a.end_date : a.formsite_moveout) || '';
+      const rent = d.monthly_rent || (be(a) ? a.monthly_rate : '') || '';
+      const form = be(a) ? 'Booking Engine' : a._source === 'Domestic' ? 'Formsite Domestic' : 'Formsite International';
+      const linked = getLinkedRefs(a.ref_number).map(r => apps.find(x => x.ref_number === r)).filter(Boolean)
+        .map(x => esc(((x.first_name||'')+' '+(x.last_name||'')).trim())).join(', ');
+      return `<tr>
+        <td><span class="wk-pname" onclick="event.stopPropagation();openPanel('${escJs(a.ref_number)}')">${esc(((a.first_name||'')+' '+(a.last_name||'')).trim() || a.ref_number)}</span>
+          <div class="wk-sub2">${esc(a.college||'')}${linked ? (a.college?' · ':'') + '🔗 with ' + linked : ''}</div></td>
+        <td>${badge(a.status)}</td>
+        <td>${esc(d.season||'—')}</td>
+        <td>${esc(unit||'—')}</td>
+        <td>${mi ? fmtDate(mi) : '—'} – ${mo ? fmtDate(mo) : '—'}</td>
+        <td>${esc(rent||'—')}</td>
+        <td>${esc(d.reservation_no||'—')}</td>
+        <td>${form}<div class="wk-sub2">${esc(String(d.lead_source || a.formsite_source || '').trim() || '—')}</div></td>
+        <td>${fmtDate(a.created_at)}</td></tr>`;
+    };
+    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>RMS Res #</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
+  };
   const num = (v, color) => v ? `<span class="wk-pill" style="background:${color}">${v}</span>` : '<span class="wk-zero">0</span>';
   const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
   document.getElementById('wk-status').innerHTML =
