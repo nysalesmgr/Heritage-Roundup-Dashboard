@@ -398,7 +398,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
             <span class="fc" id="filter-count"></span>
           </div>
           <table>
-            <thead><tr><th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+            <thead><tr><th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
             <tbody id="apps-tbody"><tr class="loading-row"><td colspan="14">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -439,7 +439,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Drop</div><div class="ps-sub">To Drop & Drop Out applications</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
           <tbody id="drop-tbody"><tr class="loading-row"><td colspan="14">No dropped applications</td></tr></tbody>
         </table>
       </div></div>
@@ -450,7 +450,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Completed</div><div class="ps-sub">Payment Received / Finalized</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th></tr></thead>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
           <tbody id="completed-tbody"><tr class="loading-row"><td colspan="15">No completed applications</td></tr></tbody>
         </table>
       </div></div>
@@ -1653,12 +1653,12 @@ function appRow(a, showReservation=false){
     ${nyCell(a.ref_number,'move_in','date', a._source==='Booking Engine' ? a.start_date : (a.formsite_movein||''))}
     ${nyCell(a.ref_number,'move_out','date', a._source==='Booking Engine' ? a.end_date : (a.formsite_moveout||''))}
     ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
-    ${nyCell(a.ref_number,'incentives','text')}
-    <td><span class="cell-val">${calcCommission(a)}</span></td>
     ${multiDateCell(a.ref_number,'vmu')}
     ${multiDateCell(a.ref_number,'ipt')}
     ${nyCell(a.ref_number,'student_status','student')}
     ${nyCell(a.ref_number,'prev_accommodation','text')}
+    ${nyCell(a.ref_number,'incentives','text')}
+    <td><span class="cell-val">${calcCommission(a)}</span></td>
   </tr>`;
 }
 
@@ -2138,7 +2138,7 @@ function renderTable(){
 
   document.querySelector('#view-applications thead tr').innerHTML = `
     <th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
-    <th>Monthly Rent</th><th>Commission %</th><th>Commission Amount</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th>`;
+    <th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th>`;
 
   tbody.innerHTML = filtered.map(a=>appRow(a)).join('');
 }
