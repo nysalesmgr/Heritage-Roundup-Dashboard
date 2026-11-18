@@ -152,6 +152,17 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .cell-val{font-size:12px;color:var(--t2);display:inline-block;min-width:40px}
 .cell-val.empty{color:var(--t3);font-style:italic}
 .tc-scroll{overflow-x:auto}
+.wk-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.wk-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px 16px}
+.wk-card .l{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
+.wk-card .v{font-size:28px;font-weight:700;margin-top:2px}.wk-card .s{font-size:11.5px;color:var(--t3)}
+.wk-h{font-size:14px;font-weight:700;margin:6px 0 10px}.wk-h span{font-weight:400;font-size:12px;color:var(--t3);margin-left:6px}
+.wk-tbl{width:100%;min-width:620px}.wk-tbl th,.wk-tbl td{text-align:center}.wk-tbl th:first-child,.wk-tbl td:first-child{text-align:left}
+.wk-tbl td.tot{font-weight:700}.wk-tbl tr.wk-cur td{background:rgba(22,163,74,.07);font-weight:600}
+.wk-tbl tr.wk-row{cursor:pointer}.wk-tbl tr.wk-detail td{text-align:left;font-size:12px;color:var(--t3);white-space:normal;background:rgba(100,116,139,.05)}
+.wk-pill{display:inline-block;min-width:32px;padding:2px 10px;border-radius:14px;color:#fff;font-weight:700;font-size:13px}
+.wk-zero{color:var(--t3);opacity:.55}
+.wk-tag{margin-left:8px;font-size:10px;background:#dcfce7;color:#166534;border-radius:10px;padding:1px 7px;font-weight:600}
 .tl-dot.pendingvmu{background:var(--vmu)}.tl-dot.pendingipt{background:var(--ipt)}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
 .tl-dot.todrop{background:var(--todrop)}.tl-dot.dropout{background:var(--dropout)}
@@ -296,6 +307,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ni" onclick="showView('renewals')" id="nav-renewals"><span class="ni-icon">🔄</span> Renewals</div>
       <div class="ni" onclick="showView('drop')" id="nav-drop"><span class="ni-icon">✕</span> Drop</div>
       <div class="ni" onclick="showView('completed')" id="nav-completed"><span class="ni-icon">✓</span> Completed</div>
+      <div class="ni" onclick="showView('weekly')" id="nav-weekly"><span class="ni-icon">📅</span> Weekly</div>
       <div class="ni" onclick="showView('blacklist')" id="nav-blacklist"><span class="ni-icon">🚫</span> Blacklist</div>
       <div class="sb-divider"></div>
       <div class="ni" onclick="loadApps(true)"><span class="ni-icon">↻</span> Refresh</div>
@@ -454,6 +466,20 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
           <tbody id="completed-tbody"><tr class="loading-row"><td colspan="15">No completed applications</td></tr></tbody>
         </table>
       </div></div>
+    </div>
+
+    <!-- WEEKLY PAGE -->
+    <div class="view" id="view-weekly">
+      <div class="ph"><div><div class="pt">Weekly</div><div class="ps-sub" id="wk-sub">Applications per week · Monday to Sunday, New York time</div></div>
+        <button class="btn" style="background:var(--navy);color:#fff" onclick="downloadWeeklyCSV()">⬇ Download Excel / CSV</button></div>
+      <div class="pc">
+        <div class="wk-cards" id="wk-cards"></div>
+        <div class="wk-h">Status now <span>where each week's applications stand today — updates as statuses change</span></div>
+        <div class="wk-cards" id="wk-status-cards"></div>
+        <div class="tc tc-scroll" style="margin-bottom:22px"><table class="wk-tbl" id="wk-status"></table></div>
+        <div class="wk-h">Form &amp; where from <span>click a week to see where the applications came from</span></div>
+        <div class="tc tc-scroll"><table class="wk-tbl" id="wk-form"></table></div>
+      </div>
     </div>
 
     <!-- BLACKLIST PAGE -->
@@ -1290,6 +1316,7 @@ function showView(v){
   if(v==='renewals'){ renderRenewalsPage(); }
   if(v==='drop'){ renderDropPage(); }
   if(v==='completed'){ renderCompletedPage(); }
+  if(v==='weekly'){ renderWeeklyPage(); }
   if(v==='blacklist'){ renderBlacklistPage(); }
 }
 
@@ -1319,6 +1346,7 @@ function refreshAll(){
   renderFinishLine();
   renderRenewals();
   if(document.getElementById('view-applications').classList.contains('on')) renderTable();
+  if(document.getElementById('view-weekly').classList.contains('on')) renderWeeklyPage();
 }
 
 function getAgreementDate(ref){
@@ -1615,6 +1643,88 @@ function renderCompletedPage(){
   const completed = apps.filter(a=>a.status==='Payment Received/Finalized' && a._property===currentProperty);
   if(!completed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="15">No completed applications</td></tr>`; return; }
   tbody.innerHTML = completed.map(a=>appRow(a, true)).join('');
+}
+
+// ── WEEKLY PAGE ──────────────────────────────────────────
+// Application forms per week (Monday – Sunday, New York time) for the city being viewed.
+// A second licensee on the same form isn't counted again (one form = one application).
+const WK_GROUPS = [
+  ['progress','In progress','#f59e0b','Pending Review, Pending VMU/IPT, Recap Sent, Revived, On Hold'],
+  ['agr','Agreement Issued','#8b5cf6','Agreement Issued'],
+  ['done','Completed','#16a34a','Payment Received/Finalized'],
+  ['drop','Dropped','#ef4444','To Drop, Drop Out ($500)'],
+];
+function wkGroup(status){
+  if(status === 'Agreement Issued') return 'agr';
+  if(status === 'Payment Received/Finalized') return 'done';
+  if(status === 'To Drop' || status === 'Drop Out ($500)' || status === 'Rejected') return 'drop';
+  return 'progress';
+}
+const WK_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const wkDay = iso => { const [y,m,d] = iso.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); };
+const wkMonday = day => new Date(day.getTime() - ((day.getUTCDay()+6)%7)*864e5);
+const wkFmt = d => d.getUTCDate()+' '+WK_MON[d.getUTCMonth()];
+const wkFmtY = d => wkFmt(d)+' '+d.getUTCFullYear();
+const wkPct = (n,t) => t ? Math.round(n/t*100)+'%' : '–';
+function weeklyData(){
+  const rows = apps.filter(a => a._property===currentProperty && !a._parent_ref && a.created_at);
+  if(!rows.length) return [];
+  const days = rows.map(a => ({ a, day: wkDay(toNYDate(a.created_at)) })).filter(x => !isNaN(x.day));
+  const first = wkMonday(new Date(Math.min(...days.map(x=>x.day.getTime()))));
+  const cur = wkMonday(wkDay(nyDateISO(new Date())));
+  const out = [];
+  for(let m = cur; m >= first; m = new Date(m.getTime()-7*864e5)){
+    const end = new Date(m.getTime()+7*864e5);
+    const inWeek = days.filter(x => x.day >= m && x.day < end).map(x => x.a);
+    const w = { m, sun: new Date(m.getTime()+6*864e5), cur: +m===+cur, total: inWeek.length, progress:0, agr:0, done:0, drop:0, be:0, fi:0, fd:0, leads:{} };
+    inWeek.forEach(a => {
+      w[wkGroup(a.status)]++;
+      if(a._source === 'Booking Engine') w.be++; else if(a._source === 'Domestic') w.fd++; else w.fi++;
+      const l = String(getNYData(a.ref_number).lead_source || a.formsite_source || '').trim() || '(not given)';
+      w.leads[l] = (w.leads[l]||0) + 1;
+    });
+    out.push(w);
+  }
+  return out;
+}
+function renderWeeklyPage(){
+  const W = weeklyData();
+  const city = currentProperty === 'boston' ? 'Boston' : 'New York';
+  document.getElementById('wk-sub').textContent = `${city} · applications per week · Monday to Sunday, New York time`;
+  const empty = '<tr class="loading-row"><td colspan="7">No applications yet</td></tr>';
+  if(!W.length){ ['wk-cards','wk-status-cards'].forEach(id=>document.getElementById(id).innerHTML=''); document.getElementById('wk-status').innerHTML = empty; document.getElementById('wk-form').innerHTML = empty; return; }
+  const t = W[0], l = W[1] || { total:0 }, total = W.reduce((n,w)=>n+w.total,0), diff = t.total - l.total;
+  const avgW = W.slice(1,9), avg = avgW.length ? avgW.reduce((n,w)=>n+w.total,0)/avgW.length : 0;
+  const card = (lab, v, sub, style='') => `<div class="wk-card" style="${style}"><div class="l">${lab}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  const wkLabel = w => `${wkFmt(w.m)} – ${wkFmtY(w.sun)}`;
+  document.getElementById('wk-cards').innerHTML =
+    card('This week', t.total, wkLabel(t)) +
+    card('Last week', l.total, l.m ? wkLabel(l) : '') +
+    card('Change', (diff>0?'+':'')+diff, 'this week vs last week (this week still in progress)', `color:${diff>0?'#15803d':diff<0?'#b91c1c':'inherit'}`) +
+    card('8-week average', avg.toFixed(1), `${total} applications since ${wkFmtY(W[W.length-1].m)}`);
+  const sum = k => W.reduce((n,w)=>n+w[k],0);
+  document.getElementById('wk-status-cards').innerHTML = WK_GROUPS.map(g => card(g[1], sum(g[0]), `${wkPct(sum(g[0]),total)} of ${total} · ${g[3]}`, `border-left:4px solid ${g[2]}`)).join('');
+  const num = (v, color) => v ? `<span class="wk-pill" style="background:${color}">${v}</span>` : '<span class="wk-zero">0</span>';
+  const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
+  document.getElementById('wk-status').innerHTML =
+    `<thead><tr><th>Week (Mon – Sun)</th>${WK_GROUPS.map(g=>`<th style="color:${g[2]}" title="${g[3]}">${g[1]}</th>`).join('')}<th>Total</th><th>% Completed</th></tr></thead><tbody>` +
+    W.map(w => `<tr class="${w.cur?'wk-cur':''}"><td>${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>`).join('') + '</tbody>';
+  const z = v => v ? v : '<span class="wk-zero">0</span>';
+  document.getElementById('wk-form').innerHTML =
+    `<thead><tr><th>Week (Mon – Sun)</th><th>Total</th><th>Booking Engine</th><th>Formsite International</th><th>Formsite Domestic</th></tr></thead><tbody>` +
+    W.map((w,i) => `<tr class="wk-row ${w.cur?'wk-cur':''}" onclick="const d=document.getElementById('wk-d${i}');d.style.display=d.style.display==='none'?'':'none'"><td>${wkLabel(w)}${tag(w)}</td><td class="tot">${w.total}</td><td>${z(w.be)}</td><td>${z(w.fi)}</td><td>${z(w.fd)}</td></tr>
+      <tr class="wk-detail" id="wk-d${i}" style="display:none"><td colspan="5">${w.total ? 'Where from: ' + Object.entries(w.leads).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+' ('+v+')').join(' · ') : 'No applications this week.'}</td></tr>`).join('') + '</tbody>';
+}
+function downloadWeeklyCSV(){
+  const W = weeklyData(); if(!W.length){ toast('No applications to download'); return; }
+  const q = v => '"' + String(v).replace(/"/g,'""') + '"';
+  const head = ['Week starting (Mon)','Week ending (Sun)','Total', ...WK_GROUPS.map(g=>g[1]), '% Completed','% Dropped','Booking Engine','Formsite International','Formsite Domestic','Where from'];
+  const lines = [head.map(q).join(',')].concat(W.map(w => [wkFmtY(w.m), wkFmtY(w.sun), w.total, ...WK_GROUPS.map(g=>w[g[0]]), wkPct(w.done,w.total), wkPct(w.drop,w.total), w.be, w.fi, w.fd,
+    Object.entries(w.leads).map(([k,v])=>k+' ('+v+')').join('; ')].map(q).join(',')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type:'text/csv' }));
+  a.download = `weekly-applications-${currentProperty==='boston'?'boston':'new-york'}-${nyDateISO(new Date())}.csv`;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
 
 // Things on an application that staff should check (shown as ⚠ in the table and at the top of the panel)
