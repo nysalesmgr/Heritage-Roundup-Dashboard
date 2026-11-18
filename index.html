@@ -2264,7 +2264,8 @@ function openPanel(ref){
     docHtml += hdr('Licensee 1', 0) + docsFor(1, a._parent_ref ? null : occD[0]);
     if(occ >= 2 && !a._parent_ref){ docHtml += hdr('Licensee 2', 14) + docsFor(2, occD[1]); }
   } else {
-    const isDomestic = (a._source === 'Domestic' || (a.formsite_source && !a.formsite_source.includes('International')));
+    // Domestic / International comes from which Formsite form it was (row source), not the "how did you hear" answer
+    const isDomestic = a._source === 'Domestic';
     const docs = isDomestic
       ? [
           ['Driver License / Passport', a.license_url],
