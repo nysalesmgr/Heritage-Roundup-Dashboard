@@ -371,6 +371,12 @@
       </div>
       <div class="panel-body">
 
+        <div class="form-group">
+          <label>Quick find unit</label>
+          <input type="text" id="recapQuickUnit" placeholder="e.g. 143 3, 143 apt 3, 230 1RL, 922 105" oninput="onQuickUnitInput()" onkeydown="if(event.key==='Enter'){event.preventDefault();onQuickUnitInput(true);}">
+          <span class="date-parsed" id="recapQuickUnitHint"></span>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label>Building</label>
@@ -550,9 +556,62 @@ const BUILDING_CODES = {
 // first, falling back to a substring match on the full building name (so
 // typing part of the street name still works as before).
 function resolveBuildingFromQuery(buildingToken) {
-  const code = buildingToken.toLowerCase();
+  const code = buildingToken.toLowerCase().trim();
   if (BUILDING_CODES[code]) return BUILDING_CODES[code];
   return BUILDINGS.find(b => b.toLowerCase().includes(code)) || null;
+}
+
+// "143 apt 3", "143 Apt. 3", "143 unit 3", "143 #3" all mean "143 3"
+function stripUnitWords(q) {
+  return String(q || "").replace(/\b(apt|apartment|unit|room|rm)\b\.?|#/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+// Turns a typed unit ("143 3", "143 apt 3", "143 3F", "230 1RL", "922 105") into a Recap Generator
+// selection. A shorthand that isn't a room on its own but covers every room of one multi-bedroom
+// apartment means the whole apartment: "143 3" / "143 3F" → 3FL + 3RL + 3RR (Whole 3BR), "152 3R" → 3RL + 3RR.
+// Returns { building, roomVal, label } or { building, error } / null.
+function resolveRecapUnit(query) {
+  const parts = stripUnitWords(query).split(" ").filter(Boolean);
+  if (parts.length < 2) return null;
+  const unitToken = parts[parts.length - 1];
+  const bToken = parts.slice(0, -1).join(" ").toLowerCase();
+  const building = /^922\b|mass/.test(bToken) ? BOSTON_BUILDINGS[0] : resolveBuildingFromQuery(bToken);
+  if (!building) return null;
+  const isBoston = BOSTON_BUILDINGS.includes(building);
+  const units = (isBoston ? BOSTON_UNITS : UNITS).filter(u => u.building === building);
+  const norm = v => String(v).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const want = norm(unitToken);
+  const exact = units.find(u => norm(u.room) === want);
+  if (exact) return { building, roomVal: exact.room, label: exact.room + " — " + CATEGORY_LABELS[exact.category] };
+  const prefix = units.filter(u => norm(u.room).startsWith(want));
+  const groupIds = [...new Set(prefix.map(u => u.groupId))];
+  if (prefix.length && groupIds.length === 1 && groupIds[0]) {
+    const g = (isBoston ? getBostonGroupsForBuilding : getGroupsForBuilding)(building).find(gr => gr.groupId === groupIds[0]);
+    if (g) {
+      const rooms = g.rooms.slice().sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      return { building, roomVal: "group:" + g.groupId.split("|")[1], label: rooms.join(" + ") + " — " + (wholeApartmentLabel(g.category) || "Whole Apartment") };
+    }
+  }
+  if (prefix.length) return { building, error: 'More than one unit starts with "' + unitToken + '" (' + prefix.map(u => u.room).join(", ") + ") — type the full unit." };
+  return { building, error: 'No unit "' + unitToken + '" at ' + building + "." };
+}
+
+function onQuickUnitInput(force) {
+  const input = document.getElementById("recapQuickUnit");
+  const hint = document.getElementById("recapQuickUnitHint");
+  const r = resolveRecapUnit(input.value);
+  if (!r) { hint.textContent = force && input.value.trim() ? "Type the building and unit, e.g. 143 3" : ""; return; }
+  const bSel = document.getElementById("recapBuilding");
+  if (bSel.value !== r.building) { bSel.value = r.building; onBuildingSelectionChange(); }
+  if (r.error) {
+    const rSel = document.getElementById("recapRoom");
+    if (rSel.value) { rSel.value = ""; onRoomSelectionChange(); }
+    hint.textContent = r.error; hint.style.color = "#b45309"; return;
+  }
+  const rSel = document.getElementById("recapRoom");
+  if (rSel.value !== r.roomVal) { rSel.value = r.roomVal; onRoomSelectionChange(); }
+  hint.textContent = "✓ " + r.building + " · " + r.label;
+  hint.style.color = "#15803d";
 }
 
 // A grouped (2BR/3BR/4BR) unit's "effective" COO is its group anchor's COO —
@@ -1824,7 +1883,7 @@ function filterRateTable() {
 
   let targetBuildingLower = null;
   let targetRoom = null;
-  const parts = raw.split(/\s+/).filter(Boolean);
+  const parts = stripUnitWords(raw).split(/\s+/).filter(Boolean);
   if (parts.length >= 2) {
     const unitToken = parts[parts.length - 1];
     const buildingToken = parts.slice(0, -1).join(" ");

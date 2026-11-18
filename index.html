@@ -4353,11 +4353,13 @@ function fmtDateTime(d){
   }catch(e){ return esc(d); }
 }
 // Format a typed amount as money: 3200 -> $3,200 ; 3200.5 -> $3,200.50. Anything that isn't a plain number is left as typed.
+// A stray 1 cent is dropped: 9500.01 -> $9,500 (rates copied from RMS carry an extra cent).
 function formatMoney(v){
   const raw = String(v ?? '').trim();
   const n = raw.replace(/[$,\s]/g,'');
   if(!/^\d+(\.\d+)?$/.test(n)) return raw;
-  const num = parseFloat(n);
+  let num = parseFloat(n);
+  if(Math.round(num*100) % 100 === 1) num = Math.floor(num);
   const hasCents = n.includes('.') && Math.round(num*100) % 100 !== 0;
   return '$' + num.toLocaleString('en-US', { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 });
 }
