@@ -303,11 +303,11 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     </div>
     <nav class="sb-nav">
       <div class="ni active" onclick="showView('overview')" id="nav-overview"><span class="ni-icon">⊞</span> Overview</div>
-      <div class="ni" onclick="showView('applications')" id="nav-applications"><span class="ni-icon">☰</span> Applications<span class="ni-badge" id="pending-badge">0</span></div>
+      <div class="ni" onclick="showView('weekly')" id="nav-weekly"><span class="ni-icon">📅</span> Weekly</div>
+      <div class="ni" onclick="showView('applications')" id="nav-applications"><span class="ni-icon">☰</span> Current active applications<span class="ni-badge" id="pending-badge">0</span></div>
       <div class="ni" onclick="showView('renewals')" id="nav-renewals"><span class="ni-icon">🔄</span> Renewals</div>
       <div class="ni" onclick="showView('drop')" id="nav-drop"><span class="ni-icon">✕</span> Drop</div>
       <div class="ni" onclick="showView('completed')" id="nav-completed"><span class="ni-icon">✓</span> Completed</div>
-      <div class="ni" onclick="showView('weekly')" id="nav-weekly"><span class="ni-icon">📅</span> Weekly</div>
       <div class="ni" onclick="showView('blacklist')" id="nav-blacklist"><span class="ni-icon">🚫</span> Blacklist</div>
       <div class="sb-divider"></div>
       <div class="ni" onclick="loadApps(true)"><span class="ni-icon">↻</span> Refresh</div>
@@ -368,7 +368,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <!-- APPLICATIONS -->
     <div class="view" id="view-applications">
       <div class="ph">
-        <div><div class="pt" id="apps-title">Applications</div><div class="ps-sub">All enquiries</div></div>
+        <div><div class="pt" id="apps-title">Current active applications</div><div class="ps-sub">All enquiries</div></div>
         <div style="display:flex;gap:8px">
           <button class="refresh-btn" onclick="loadApps(true)">↻ Refresh</button>
           <button class="refresh-btn" id="add-app-btn" onclick="openAddApplication()" style="background:var(--navy);color:#FFF;border-color:var(--navy);display:none">+ Add Application</button>
@@ -971,7 +971,7 @@ function switchProperty(p){
   document.getElementById('ps-newyork').classList.toggle('active', p==='newyork');
   document.getElementById('sb-prop-label').textContent = p==='boston' ? 'Boston' : 'New York';
   document.getElementById('ov-title').textContent = p==='boston' ? 'Boston — Overview' : 'New York — Overview';
-  document.getElementById('apps-title').textContent = p==='boston' ? 'Boston — Applications' : 'New York — Applications';
+  document.getElementById('apps-title').textContent = p==='boston' ? 'Boston — Current active applications' : 'New York — Current active applications';
   document.getElementById('add-app-btn').style.display = p==='boston' ? 'block' : 'none';
   document.getElementById('apps-tbody').innerHTML = '<tr class="loading-row"><td colspan="7">Loading…</td></tr>';
   closePanel();
