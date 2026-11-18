@@ -174,6 +174,7 @@ td.note-cell{min-width:170px;max-width:240px;white-space:normal;cursor:pointer;v
 .wk-people td{text-align:left!important;color:var(--t1);font-size:12.5px;padding:7px 8px;border-top:1px dashed var(--border);vertical-align:top;white-space:nowrap}
 .wk-people td:first-child{white-space:normal;min-width:170px}.wk-sub2{font-size:11px;color:var(--t3);margin-top:2px;white-space:normal}
 .wk-rem{min-width:220px;max-width:340px;white-space:normal!important}.wk-remtxt{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.wk-toggle{cursor:pointer;user-select:none}.wk-toggle .wk-arrow{display:inline-block;width:14px;margin:0;font-size:13px;color:var(--t1)}
 .wk-tag{margin-left:8px;font-size:10px;background:#dcfce7;color:#166534;border-radius:10px;padding:1px 7px;font-weight:600}
 .tl-dot.pendingvmu{background:var(--vmu)}.tl-dot.pendingipt{background:var(--ipt)}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
@@ -488,8 +489,8 @@ td.note-cell{min-width:170px;max-width:240px;white-space:normal;cursor:pointer;v
         <div class="wk-cards" id="wk-cards"></div>
         <div class="wk-h">Status now <span>where each week's applications stand today · click a week to see who applied</span></div>
         <div class="tc tc-scroll" style="margin-bottom:22px"><table class="wk-tbl" id="wk-status"></table></div>
-        <div class="wk-h">Form &amp; where from <span>click a week to see where the applications came from</span></div>
-        <div class="tc tc-scroll"><table class="wk-tbl" id="wk-form"></table></div>
+        <div class="wk-h wk-toggle" onclick="const t=document.getElementById('wk-form-wrap');const open=t.style.display==='none';t.style.display=open?'':'none';this.querySelector('.wk-arrow').textContent=open?'▾':'▸'"><span class="wk-arrow">▸</span> Form &amp; where from <span>click to show · then click a week to see where the applications came from</span></div>
+        <div class="tc tc-scroll" id="wk-form-wrap" style="display:none"><table class="wk-tbl" id="wk-form"></table></div>
       </div>
     </div>
 
