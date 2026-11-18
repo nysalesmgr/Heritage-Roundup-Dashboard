@@ -4337,14 +4337,15 @@ function toNYDate(d){
   const date = new Date(v);
   return isNaN(date.getTime()) ? '' : nyDateISO(date);
 }
-// Date as DD-MM-YYYY for plain text (textContent); unreadable values come back as written
+// Date as "10 Jan 2027" for plain text (textContent); unreadable values come back as written
 function fmtDatePlain(d){
   if(!d||d==='—') return '—';
   try{
     const iso = toNYDate(d);
     if(!iso) return String(d);
     const [yyyy,mm,dd] = iso.split('-');
-    return `${dd}-${mm}-${yyyy}`;
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mm,10)-1];
+    return mon ? `${parseInt(dd,10)} ${mon} ${yyyy}` : `${dd}-${mm}-${yyyy}`;
   }catch(e){ return String(d); }
 }
 // Same, safe to put into HTML
