@@ -162,6 +162,10 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .wk-tbl tr.wk-row{cursor:pointer}.wk-tbl tr.wk-detail td{text-align:left;font-size:12px;color:var(--t3);white-space:normal;background:rgba(100,116,139,.05)}
 .wk-pill{display:inline-block;min-width:32px;padding:2px 10px;border-radius:14px;color:#fff;font-weight:700;font-size:13px}
 .wk-zero{color:var(--t3);opacity:.55}
+.wk-person{display:grid;grid-template-columns:minmax(160px,1.2fr) 230px 170px 1fr 100px;gap:10px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--border);color:var(--t2,var(--t1))}
+.wk-person:last-child{border-bottom:none}.wk-person .badge{justify-self:start}.wk-pname{font-weight:600;color:var(--navy);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.wk-tbl tr.wk-all td{font-weight:700;border-top:2px solid var(--border);background:rgba(100,116,139,.06)}
+@media (max-width:700px){.wk-person{grid-template-columns:1fr auto}.wk-person span:nth-child(n+3){display:none}}
 .wk-tag{margin-left:8px;font-size:10px;background:#dcfce7;color:#166534;border-radius:10px;padding:1px 7px;font-weight:600}
 .tl-dot.pendingvmu{background:var(--vmu)}.tl-dot.pendingipt{background:var(--ipt)}
 .tl-dot.recapsent{background:var(--recap)}.tl-dot.agreementissued{background:var(--agr)}
@@ -474,8 +478,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
         <button class="btn" style="background:var(--navy);color:#fff" onclick="downloadWeeklyCSV()">⬇ Download Excel / CSV</button></div>
       <div class="pc">
         <div class="wk-cards" id="wk-cards"></div>
-        <div class="wk-h">Status now <span>where each week's applications stand today — updates as statuses change</span></div>
-        <div class="wk-cards" id="wk-status-cards"></div>
+        <div class="wk-h">Status now <span>where each week's applications stand today · click a week to see who applied</span></div>
         <div class="tc tc-scroll" style="margin-bottom:22px"><table class="wk-tbl" id="wk-status"></table></div>
         <div class="wk-h">Form &amp; where from <span>click a week to see where the applications came from</span></div>
         <div class="tc tc-scroll"><table class="wk-tbl" id="wk-form"></table></div>
@@ -1676,7 +1679,7 @@ function weeklyData(){
   for(let m = cur; m >= first; m = new Date(m.getTime()-7*864e5)){
     const end = new Date(m.getTime()+7*864e5);
     const inWeek = days.filter(x => x.day >= m && x.day < end).map(x => x.a);
-    const w = { m, sun: new Date(m.getTime()+6*864e5), cur: +m===+cur, total: inWeek.length, progress:0, agr:0, done:0, drop:0, be:0, fi:0, fd:0, leads:{} };
+    const w = { m, sun: new Date(m.getTime()+6*864e5), cur: +m===+cur, total: inWeek.length, progress:0, agr:0, done:0, drop:0, be:0, fi:0, fd:0, leads:{}, list: inWeek.slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)) };
     inWeek.forEach(a => {
       w[wkGroup(a.status)]++;
       if(a._source === 'Booking Engine') w.be++; else if(a._source === 'Domestic') w.fd++; else w.fi++;
@@ -1692,23 +1695,23 @@ function renderWeeklyPage(){
   const city = currentProperty === 'boston' ? 'Boston' : 'New York';
   document.getElementById('wk-sub').textContent = `${city} · applications per week · Monday to Sunday, New York time`;
   const empty = '<tr class="loading-row"><td colspan="7">No applications yet</td></tr>';
-  if(!W.length){ ['wk-cards','wk-status-cards'].forEach(id=>document.getElementById(id).innerHTML=''); document.getElementById('wk-status').innerHTML = empty; document.getElementById('wk-form').innerHTML = empty; return; }
-  const t = W[0], l = W[1] || { total:0 }, total = W.reduce((n,w)=>n+w.total,0), diff = t.total - l.total;
-  const avgW = W.slice(1,9), avg = avgW.length ? avgW.reduce((n,w)=>n+w.total,0)/avgW.length : 0;
+  if(!W.length){ document.getElementById('wk-cards').innerHTML=''; document.getElementById('wk-status').innerHTML = empty; document.getElementById('wk-form').innerHTML = empty; return; }
+  const t = W[0], l = W[1] || { total:0 }, total = W.reduce((n,w)=>n+w.total,0);
   const card = (lab, v, sub, style='') => `<div class="wk-card" style="${style}"><div class="l">${lab}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
   const wkLabel = w => `${wkFmt(w.m)} – ${wkFmtY(w.sun)}`;
   document.getElementById('wk-cards').innerHTML =
     card('This week', t.total, wkLabel(t)) +
-    card('Last week', l.total, l.m ? wkLabel(l) : '') +
-    card('Change', (diff>0?'+':'')+diff, 'this week vs last week (this week still in progress)', `color:${diff>0?'#15803d':diff<0?'#b91c1c':'inherit'}`) +
-    card('8-week average', avg.toFixed(1), `${total} applications since ${wkFmtY(W[W.length-1].m)}`);
+    card('Last week', l.total, l.m ? wkLabel(l) : '');
   const sum = k => W.reduce((n,w)=>n+w[k],0);
-  document.getElementById('wk-status-cards').innerHTML = WK_GROUPS.map(g => card(g[1], sum(g[0]), `${wkPct(sum(g[0]),total)} of ${total} · ${g[3]}`, `border-left:4px solid ${g[2]}`)).join('');
+  // Who applied that week: name (opens the application), status, form, where from
+  const people = w => w.list.map(a => `<div class="wk-person"><span class="wk-pname" onclick="event.stopPropagation();openPanel('${escJs(a.ref_number)}')">${esc(((a.first_name||'')+' '+(a.last_name||'')).trim() || a.ref_number)}</span>${badge(a.status)}<span>${a._source==='Booking Engine'?'Booking Engine':a._source==='Domestic'?'Formsite Domestic':'Formsite International'}</span><span>${esc(String(getNYData(a.ref_number).lead_source || a.formsite_source || '').trim() || '—')}</span><span>${fmtDate(a.created_at)}</span></div>`).join('');
   const num = (v, color) => v ? `<span class="wk-pill" style="background:${color}">${v}</span>` : '<span class="wk-zero">0</span>';
   const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
   document.getElementById('wk-status').innerHTML =
     `<thead><tr><th>Week (Mon – Sun)</th>${WK_GROUPS.map(g=>`<th style="color:${g[2]}" title="${g[3]}">${g[1]}</th>`).join('')}<th>Total</th><th>% Completed</th></tr></thead><tbody>` +
-    W.map(w => `<tr class="${w.cur?'wk-cur':''}"><td>${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>`).join('') + '</tbody>';
+    W.map((w,i) => `<tr class="wk-row ${w.cur?'wk-cur':''}" onclick="const d=document.getElementById('wk-p${i}');d.style.display=d.style.display==='none'?'':'none'"><td>${w.total?'▸ ':''}${wkLabel(w)}${tag(w)}</td>${WK_GROUPS.map(g=>`<td>${num(w[g[0]], g[2])}</td>`).join('')}<td class="tot">${w.total}</td><td>${wkPct(w.done,w.total)}</td></tr>
+      <tr class="wk-detail" id="wk-p${i}" style="display:none"><td colspan="${WK_GROUPS.length+3}">${w.total ? people(w) : 'No applications this week.'}</td></tr>`).join('') +
+    `<tr class="wk-all"><td>All weeks</td>${WK_GROUPS.map(g=>`<td style="color:${g[2]}">${sum(g[0])}</td>`).join('')}<td class="tot">${total}</td><td>${wkPct(sum('done'),total)}</td></tr></tbody>`;
   const z = v => v ? v : '<span class="wk-zero">0</span>';
   document.getElementById('wk-form').innerHTML =
     `<thead><tr><th>Week (Mon – Sun)</th><th>Total</th><th>Booking Engine</th><th>Formsite International</th><th>Formsite Domestic</th></tr></thead><tbody>` +
