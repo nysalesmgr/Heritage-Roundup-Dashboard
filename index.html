@@ -684,6 +684,14 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       </div>
       <div class="isec"><div class="isec-title">Remarks History</div><div id="remarks-list"></div></div>
     </div>
+    <div id="tab-fomo" class="ptc">
+      <div class="isec">
+        <div class="isec-title">FOMO!</div>
+        <textarea class="notes-area" id="fomo-text" placeholder="Add a FOMO note… e.g. told her 2 others are looking at 143 3FL, decide by Friday" style="min-height:100px"></textarea>
+        <button class="notes-save-btn" onclick="saveFomo()">Save FOMO note</button>
+      </div>
+      <div class="isec"><div class="isec-title">FOMO History</div><div id="fomo-list"></div></div>
+    </div>
 
     <div id="tab-notes" class="ptc">
       <div class="isec">
@@ -1702,15 +1710,16 @@ async function loadWeekRemarks(row){
   const cells = [...row.querySelectorAll('td.wk-rem')];
   if(!cells.length || row.dataset.remLoaded) return;
   row.dataset.remLoaded = '1';
-  const refs = cells.map(c => c.dataset.ref);
+  const refs = [...new Set(cells.map(c => c.dataset.ref))];
   try{
-    const res = await sbGet(`/rest/v1/staff_history?select=ref_number,content,staff_name,created_at&entry_type=eq.remark&ref_number=in.(${refs.map(r=>encodeURIComponent('"'+r.replace(/"/g,'')+'"')).join(',')})&order=created_at.desc`);
+    const res = await sbGet(`/rest/v1/staff_history?select=ref_number,entry_type,content,staff_name,created_at&entry_type=in.(remark,fomo)&ref_number=in.(${refs.map(r=>encodeURIComponent('"'+r.replace(/"/g,'')+'"')).join(',')})&order=created_at.desc`);
     const rows = res.ok ? await res.json() : [];
     cells.forEach(c => {
-      const mine = rows.filter(h => h.ref_number === c.dataset.ref);
+      const type = c.classList.contains('wk-fomo') ? 'fomo' : 'remark';
+      const mine = rows.filter(h => h.ref_number === c.dataset.ref && h.entry_type === type);
       if(!mine.length){ c.innerHTML = '<span class="wk-zero">—</span>'; return; }
       const h = mine[0];
-      c.innerHTML = `<div class="wk-remtxt">${esc(h.content.replace(/^💬 /,''))}</div><div class="wk-sub2">${fmtDate(h.created_at)} · ${esc(h.staff_name||'')}${mine.length > 1 ? ` · +${mine.length-1} earlier` : ''}</div>`;
+      c.innerHTML = `<div class="wk-remtxt">${esc(h.content.replace(/^(💬|🔥) /,''))}</div><div class="wk-sub2">${fmtDate(h.created_at)} · ${esc(h.staff_name||'')}${mine.length > 1 ? ` · +${mine.length-1} earlier` : ''}</div>`;
     });
   }catch(e){
     row.dataset.remLoaded = '';
@@ -1754,10 +1763,11 @@ function renderWeeklyPage(){
         <td>${wkDates(d.vmu)}</td>
         <td>${wkDates(d.ipt)}</td>
         <td class="wk-rem" data-ref="${esc(a.ref_number)}"><span class="wk-zero">Loading…</span></td>
+        <td class="wk-rem wk-fomo" data-ref="${esc(a.ref_number)}"><span class="wk-zero">Loading…</span></td>
         <td>${form}<div class="wk-sub2">${esc(String(d.lead_source || a.formsite_source || '').trim() || '—')}</div></td>
         <td>${fmtDate(a.created_at)}</td></tr>`;
     };
-    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>VMU</th><th>IPT</th><th>Remarks</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
+    return `<table class="wk-people"><thead><tr><th>Applicant</th><th>Status</th><th>Season</th><th>Unit</th><th>Stay</th><th>Monthly rent</th><th>VMU</th><th>IPT</th><th>Remarks</th><th>FOMO!</th><th>Form · where from</th><th>Submitted</th></tr></thead><tbody>${w.list.map(row).join('')}</tbody></table>`;
   };
   const num = (v, color) => v ? `<span class="wk-pill" style="background:${color}">${v}</span>` : '<span class="wk-zero">0</span>';
   const tag = w => w.cur ? '<span class="wk-tag">this week</span>' : '';
@@ -2346,8 +2356,8 @@ function openPanel(ref){
   `;
 
   // Build tabs dynamically
-  const tabNames = ['licensee','booking','documents','remarks','notes'];
-  const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', remarks: 'VMU/IPT Remarks', notes: 'History' };
+  const tabNames = ['licensee','booking','documents','remarks','fomo','notes'];
+  const tabLabels = { licensee: isNY ? 'Applicant' : 'Licensee', booking: 'Booking', documents: 'Documents', remarks: 'VMU/IPT Remarks', fomo: 'FOMO!', notes: 'History' };
   document.getElementById('pan-tabs').innerHTML = tabNames.map((t,i)=>`<div class="ptab${i===0?' on':''}" onclick="switchTab('${t}')">${tabLabels[t]}</div>`).join('');
 
   // Licensee tab
@@ -2460,6 +2470,8 @@ function openPanel(ref){
   // Remarks tab
   document.getElementById('remarks-text').value = '';
   document.getElementById('remarks-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
+  document.getElementById('fomo-text').value = '';
+  document.getElementById('fomo-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
   renderPanelViewingDates(ref);
   document.getElementById('notes-text').value = 'Loading…';
   document.getElementById('tl-list').innerHTML = '<div style="color:var(--t3);font-size:12px">Loading…</div>';
@@ -2501,13 +2513,14 @@ function openPanel(ref){
   Promise.all([fetchHistory(ref), ...olderRefs.map(r=>fetchHistory(r))]).then(results=>{
     const histEntries = results.flat().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     renderRemarksList(histEntries);
+    renderFomoList(histEntries);
     const tl = document.getElementById('tl-list');
     if(!histEntries.length){
       tl.innerHTML = `<div class="tl-item"><div class="tl-dot pending"></div><div><div class="tl-t">Pending Review</div><div class="tl-d">${fmtDateTime(a.created_at)}</div></div></div>`;
     } else {
       tl.innerHTML = histEntries.map(h=>`
         <div class="tl-item">
-          <div class="tl-dot ${h.entry_type==='note'?'note':h.entry_type==='field'?'field':statusClass(h.content)}"></div>
+          <div class="tl-dot ${h.entry_type==='note'||h.entry_type==='fomo'?'note':h.entry_type==='field'?'field':statusClass(h.content)}"></div>
           <div>
             <div class="tl-t" style="white-space:pre-wrap">${esc(h.content)}</div>
             <div class="tl-d">${fmtDateTime(h.created_at)} · <strong>${esc(h.staff_name)}</strong></div>
@@ -2901,6 +2914,28 @@ async function saveRemarks(){
   toast('Remark saved ✓');
 }
 
+async function saveFomo(){
+  if(!selectedRef) return;
+  const text = document.getElementById('fomo-text').value.trim();
+  if(!text){ toast('FOMO note is empty'); return; }
+  await insertHistory(selectedRef, 'fomo', '🔥 ' + text);
+  document.getElementById('fomo-text').value = '';
+  renderFomoList(await fetchHistory(selectedRef));
+  toast('FOMO note saved ✓');
+}
+function renderFomoList(histEntries){
+  const list = document.getElementById('fomo-list');
+  if(!list) return;
+  const items = histEntries.filter(h=>h.entry_type==='fomo');
+  if(!items.length){ list.innerHTML='<div style="color:var(--t3);font-size:12px">No FOMO notes yet.</div>'; return; }
+  list.innerHTML = items.map(h=>`
+    <div class="tl-item">
+      <div class="tl-dot note"></div>
+      <div><div class="tl-t" style="white-space:pre-wrap">${esc(h.content.replace(/^🔥 /,''))}</div>
+      <div class="tl-d">${fmtDateTime(h.created_at)} · <strong>${esc(h.staff_name)}</strong></div></div>
+    </div>`).join('');
+}
+
 function renderRemarksList(histEntries){
   const list = document.getElementById('remarks-list');
   if(!list) return;
@@ -2923,7 +2958,7 @@ async function saveNotes(){  if(!selectedRef) return;
   const histEntries = await fetchHistory(selectedRef);
   document.getElementById('tl-list').innerHTML = histEntries.map(h=>`
     <div class="tl-item">
-      <div class="tl-dot ${h.entry_type==='note'?'note':h.entry_type==='field'?'field':statusClass(h.content)}"></div>
+      <div class="tl-dot ${h.entry_type==='note'||h.entry_type==='fomo'?'note':h.entry_type==='field'?'field':statusClass(h.content)}"></div>
       <div><div class="tl-t" style="white-space:pre-wrap">${esc(h.content)}</div>
       <div class="tl-d">${fmtDateTime(h.created_at)} · <strong>${esc(h.staff_name)}</strong></div></div>
     </div>`).join('');
