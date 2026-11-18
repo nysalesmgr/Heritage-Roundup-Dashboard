@@ -152,6 +152,9 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .cell-val{font-size:12px;color:var(--t2);display:inline-block;min-width:40px}
 .cell-val.empty{color:var(--t3);font-style:italic}
 .tc-scroll{overflow-x:auto}
+td.note-cell{min-width:170px;max-width:240px;white-space:normal;cursor:pointer;vertical-align:middle}
+.note-txt{font-size:12px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.note-meta{font-size:10.5px;color:var(--t3);margin-top:2px}
 .wk-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
 .wk-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px 16px}
 .wk-card .l{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
@@ -419,7 +422,7 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
             <span class="fc" id="filter-count"></span>
           </div>
           <table>
-            <thead><tr><th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
+            <thead><tr><th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>VMU/IPT Remarks</th><th>FOMO!</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
             <tbody id="apps-tbody"><tr class="loading-row"><td colspan="14">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -460,8 +463,8 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Drop</div><div class="ps-sub">To Drop & Drop Out applications</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
-          <tbody id="drop-tbody"><tr class="loading-row"><td colspan="14">No dropped applications</td></tr></tbody>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>VMU/IPT Remarks</th><th>FOMO!</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
+          <tbody id="drop-tbody"><tr class="loading-row"><td colspan="16">No dropped applications</td></tr></tbody>
         </table>
       </div></div>
     </div>
@@ -471,8 +474,8 @@ td{padding:11px 14px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <div class="ph"><div><div class="pt">Completed</div><div class="ps-sub">Payment Received / Finalized</div></div></div>
       <div class="pc"><div class="tc tc-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
-          <tbody id="completed-tbody"><tr class="loading-row"><td colspan="15">No completed applications</td></tr></tbody>
+          <thead><tr><th>Date</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Reservation #</th><th>Unit</th><th>Move-in</th><th>Move-out</th><th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>VMU/IPT Remarks</th><th>FOMO!</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th></tr></thead>
+          <tbody id="completed-tbody"><tr class="loading-row"><td colspan="17">No completed applications</td></tr></tbody>
         </table>
       </div></div>
     </div>
@@ -1328,6 +1331,7 @@ function showView(v){
   document.getElementById('view-'+v).classList.add('on');
   document.getElementById('nav-'+v).classList.add('active');
   if(v==='applications') renderTable();
+  if(['applications','drop','completed'].includes(v)) loadLatestNotes();
   if(v==='overview'){ renderRecent(); renderFinishLine(); renderRenewals(); }
   if(v==='renewals'){ renderRenewalsPage(); }
   if(v==='drop'){ renderDropPage(); }
@@ -1362,6 +1366,7 @@ function refreshAll(){
   renderFinishLine();
   renderRenewals();
   if(document.getElementById('view-applications').classList.contains('on')) renderTable();
+  loadLatestNotes(true);
   if(document.getElementById('view-weekly').classList.contains('on')) renderWeeklyPage();
 }
 
@@ -1648,7 +1653,7 @@ function renderDropPage(){
     const name = ((a.first_name||'')+' '+(a.last_name||'')).trim().toLowerCase();
     return !activeNames.has(name);
   });
-  if(!dropped.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="14">No dropped applications</td></tr>`; return; }
+  if(!dropped.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="16">No dropped applications</td></tr>`; return; }
   tbody.innerHTML = dropped.map(a=>appRow(a)).join('');
 }
 
@@ -1657,7 +1662,7 @@ function renderCompletedPage(){
   const tbody = document.getElementById('completed-tbody');
   if(!tbody) return;
   const completed = apps.filter(a=>a.status==='Payment Received/Finalized' && a._property===currentProperty);
-  if(!completed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="15">No completed applications</td></tr>`; return; }
+  if(!completed.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="17">No completed applications</td></tr>`; return; }
   tbody.innerHTML = completed.map(a=>appRow(a, true)).join('');
 }
 
@@ -1812,6 +1817,38 @@ function issueBadge(a){
   const list = appIssues(a);
   return list.length ? `<span title="${esc(list.join('\n'))}" style="display:inline-block;margin-top:3px;font-size:10.5px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:1px 8px">⚠ ${list.length === 1 ? esc(list[0]) : list.length + ' things to check'}</span>` : '';
 }
+// Latest VMU/IPT remark and FOMO! note per application, for the table columns (one download for all)
+let latestNotes = {};          // ref -> { remark: {...}, fomo: {...}, remarkCount, fomoCount }
+let latestNotesAt = 0, latestNotesLoading = null;
+function loadLatestNotes(force){
+  if(latestNotesLoading) return latestNotesLoading;
+  if(!force && Date.now() - latestNotesAt < 60000) return Promise.resolve();
+  latestNotesLoading = sbGet('/rest/v1/staff_history?select=ref_number,entry_type,content,staff_name,created_at&entry_type=in.(remark,fomo)&order=created_at.desc&limit=10000')
+    .then(r => r.ok ? r.json() : [])
+    .then(rows => {
+      const m = {};
+      rows.forEach(h => { const e = m[h.ref_number] = m[h.ref_number] || {}; if(!e[h.entry_type]) e[h.entry_type] = h; e[h.entry_type+'Count'] = (e[h.entry_type+'Count']||0) + 1; });
+      latestNotes = m; latestNotesAt = Date.now();
+      ['applications','drop','completed'].forEach(v => { if(document.getElementById('view-'+v)?.classList.contains('on')) ({applications:renderTable, drop:renderDropPage, completed:renderCompletedPage})[v](); });
+    })
+    .catch(e => console.warn('Remarks / FOMO load failed:', e.message))
+    .finally(() => { latestNotesLoading = null; });
+  return latestNotesLoading;
+}
+function noteSaved(ref, type, content){
+  const e = latestNotes[ref] = latestNotes[ref] || {};
+  e[type] = { ref_number: ref, entry_type: type, content, staff_name: currentStaff, created_at: new Date().toISOString() };
+  e[type+'Count'] = (e[type+'Count']||0) + 1;
+}
+function latestNoteCell(ref, type){
+  const e = latestNotes[ref] || {}, h = e[type];
+  const tab = type === 'fomo' ? 'fomo' : 'remarks';
+  const open = `event.stopPropagation();openPanel('${escJs(ref)}');switchTab('${tab}')`;
+  if(!h) return `<td class="note-cell" onclick="${open}" title="Add in the panel"><span class="cell-val empty">—</span></td>`;
+  const text = String(h.content||'').replace(/^(💬|🔥) /,'');
+  const more = e[type+'Count'] > 1 ? ` · +${e[type+'Count']-1}` : '';
+  return `<td class="note-cell" onclick="${open}" title="${esc(text)}"><div class="note-txt">${esc(text)}</div><div class="note-meta">${fmtDate(h.created_at)} · ${esc(h.staff_name||'')}${more}</div></td>`;
+}
 function appRow(a, showReservation=false){
   return `<tr onclick="openPanel('${escJs(a.ref_number)}')" style="cursor:pointer">
     <td><span class="td-date">${fmtDate(a.created_at)}</span></td>
@@ -1832,6 +1869,8 @@ function appRow(a, showReservation=false){
     ${nyCell(a.ref_number,'monthly_rent','text', a._source==='Booking Engine' ? (a.monthly_rate||'') : '')}
     ${multiDateCell(a.ref_number,'vmu')}
     ${multiDateCell(a.ref_number,'ipt')}
+    ${latestNoteCell(a.ref_number,'remark')}
+    ${latestNoteCell(a.ref_number,'fomo')}
     ${nyCell(a.ref_number,'student_status','student')}
     ${nyCell(a.ref_number,'prev_accommodation','text')}
     ${nyCell(a.ref_number,'incentives','text')}
@@ -2311,11 +2350,11 @@ function renderTable(){
   else if(srt==='status'){ const o={'Pending Review':0,'Pending VMU/IPT':1,'Recap Sent':3,'Agreement Issued':4,'Revived':5,'To Drop':6,'Drop Out ($500)':7,'Payment Received/Finalized':8}; filtered.sort((a,b)=>(o[a.status] ?? 9)-(o[b.status] ?? 9)); }
 
   document.getElementById('filter-count').textContent = filtered.length + ' of ' + apps.length;
-  if(!filtered.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="14">No applications match your filters</td></tr>`; return; }
+  if(!filtered.length){ tbody.innerHTML=`<tr class="loading-row"><td colspan="16">No applications match your filters</td></tr>`; return; }
 
   document.querySelector('#view-applications thead tr').innerHTML = `
     <th>Date of Submission</th><th>Status</th><th>Season</th><th>Applicant</th><th>Source</th><th>Unit</th><th>Move-in</th><th>Move-out</th>
-    <th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th>`;
+    <th>Monthly Rent</th><th>VMU Date</th><th>IPT Date</th><th>VMU/IPT Remarks</th><th>FOMO!</th><th>Student Status</th><th>Prev. Accommodation</th><th>Commission %</th><th>Commission Amount</th>`;
 
   tbody.innerHTML = filtered.map(a=>appRow(a)).join('');
 }
@@ -2907,6 +2946,7 @@ async function saveRemarks(){
   const text = document.getElementById('remarks-text').value.trim();
   if(!text){ toast('Remark is empty'); return; }
   await insertHistory(selectedRef, 'remark', '💬 ' + text);
+  noteSaved(selectedRef, 'remark', '💬 ' + text);
   document.getElementById('remarks-text').value = '';
   // Refresh remarks list
   const histEntries = await fetchHistory(selectedRef);
@@ -2919,6 +2959,7 @@ async function saveFomo(){
   const text = document.getElementById('fomo-text').value.trim();
   if(!text){ toast('FOMO note is empty'); return; }
   await insertHistory(selectedRef, 'fomo', '🔥 ' + text);
+  noteSaved(selectedRef, 'fomo', '🔥 ' + text);
   document.getElementById('fomo-text').value = '';
   renderFomoList(await fetchHistory(selectedRef));
   toast('FOMO note saved ✓');
