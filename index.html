@@ -3053,6 +3053,8 @@ function detectDocType(text, mrz){
   if((mrz && (mrz.date_of_birth || mrz.document_number) && /\nP[A-Z<][A-Z<]{3}[A-Z<]*<</.test('\n'+t.split('\n').map(l=>l.replace(/\s+/g,'')).join('\n'))) || /PASSPORT|PASSEPORT|PASAPORTE|REISEPASS/.test(t)) return 'Passport';
   if(/DRIVER'?S?\s*LICEN[CS]E|DRIVING\s*LICEN[CS]E|PERMIS\s*DE\s*CONDUIRE|LICENCIA\s*DE\s*CONDUCIR/.test(t)) return 'Driver Licence';
   if(/IDENTIFICATION\s*CARD|IDENTITY\s*CARD|\bID\s*CARD\b|NON-?DRIVER/.test(t) || /(^|\n)I[A-Z<][A-Z<]{3}[A-Z0-9<]{25}/.test(flat)) return 'ID Card';
+  // Other US licence wordings: "PROBATIONARY AUTO LICENSE" (NJ), "OPERATOR'S LICENSE", "LEARNER'S PERMIT", "DL 123…" — on a card from a US state
+  if(usStateOf(t) && /AUTO\s*LICEN[CS]E|OPERATOR'?S?\s*LICEN[CS]E|CHAUFFEUR|LEARNER'?S?\s*PERMIT|INSTRUCTION\s*PERMIT|PROBATIONARY|\bLICEN[CS]E\b|(^|\n)\s*(\d+[A-Z]?\s*)?DL\b/.test(t)) return 'Driver Licence';
   return '';
 }
 
