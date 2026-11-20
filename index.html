@@ -3357,7 +3357,7 @@ function markScanned(ref){
 // the ID number / expiry / date of birth / ID type (retried once a day, in case the document or reader changed)
 function scanMissing(a){
   const c = editableCache[a.ref_number]||{};
-  return !(c.passport_number || a.passport_number) || !(c.passport_expiry || a.passport_expiry) || !c.dob || !c.id_type;
+  return !(c.passport_number || a.passport_number) || !(c.passport_expiry || a.passport_expiry) || !c.dob || !c.id_type || !c.gender || !c.nationality;
 }
 function needsScan(a){
   if(scanTried.has(a.ref_number)) return false;
@@ -3536,9 +3536,15 @@ function parsePassportMRZ(text){
     .filter(l=>/^[A-Z0-9<]{10,46}$/.test(l));
   // Line 2: doc no(9) check(1) nationality(3) birth date(6) check(1) sex(1) expiry(6) check(1) …
   const L2 = /^[A-Z0-9<]{9}[0-9<][A-Z<]{3}\d{6}\d[MFX<]\d{6}\d/;
-  const i2 = lines.findIndex(l=>L2.test(l));
+  // OCR often reads a digit as a look-alike letter in the date / check-digit positions ("O80428" for 080428);
+  // fix only those positions — the check digits below still have to match, so a wrong guess is never used
+  const digitAt = new Set([9,13,14,15,16,17,18,19,21,22,23,24,25,26,27]);
+  const LOOK = { O:'0', Q:'0', D:'0', U:'0', I:'1', L:'1', T:'1', Z:'2', S:'5', G:'6', B:'8' };
+  const fixL2 = l => (l.length >= 28 && /^[A-Z<]{3}$/.test(l.substring(10,13))) ? [...l].map((c,i) => digitAt.has(i) && LOOK[c] ? LOOK[c] : c).join('') : l;
+  const fixed = lines.map(fixL2);
+  const i2 = fixed.findIndex(l=>L2.test(l));
   if(i2 < 0) return result;
-  const l2 = lines[i2].padEnd(44,'<').slice(0,44);
+  const l2 = fixed[i2].padEnd(44,'<').slice(0,44);
   // Line 1 is the nearest line above it that starts with "P" (it may be cut short by the scan)
   let l1 = '';
   for(let k=i2-1; k>=0; k--){ if(/^P[A-Z<][A-Z<]{3}/.test(lines[k])){ l1 = lines[k]; break; } }
