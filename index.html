@@ -1118,8 +1118,8 @@ async function loadBostonApps(pre){
       const updates = {};
       if(!cached.lead_source) updates.lead_source = r.source_override||'Booking Engine';
       if(!cached.payment_plan && normalisePlan(r.payment_plan || raw.payment_plan)) updates.payment_plan = normalisePlan(r.payment_plan || raw.payment_plan);
-      if(!cached.move_in && entry.start_date)   updates.move_in      = entry.start_date;
-      if(!cached.move_out && entry.end_date)     updates.move_out     = entry.end_date;
+      if(!cached.move_in && entry.start_date)   updates.move_in      = toNYDate(entry.start_date) || entry.start_date;
+      if(!cached.move_out && entry.end_date)     updates.move_out     = toNYDate(entry.end_date) || entry.end_date;
       if(!cached.unit && (r.apartment || raw.unit)) updates.unit      = r.apartment || raw.unit;
       if(!cached.monthly_rent && entry.monthly_rate){
         updates.monthly_rent = formatMoney(String(entry.monthly_rate).replace(/\.\d+$/,''));
@@ -1196,8 +1196,8 @@ async function loadNYApps(pre){
         const unitNo = r.unit || (r.raw_data||{}).unit || '';
         const unitVal = roomId && unitNo ? `${roomId} - ${unitNo}` : (roomId || unitNo);
         if(unitVal && !cached.unit) updates.unit = unitVal;
-        if(r.move_in    && !cached.move_in)       updates.move_in      = r.move_in;
-        if(r.move_out   && !cached.move_out)      updates.move_out     = r.move_out;
+        if(r.move_in    && !cached.move_in)       updates.move_in      = toNYDate(r.move_in) || r.move_in;
+        if(r.move_out   && !cached.move_out)      updates.move_out     = toNYDate(r.move_out) || r.move_out;
         if(r.monthly_rate && !cached.monthly_rent){
           updates.monthly_rent = formatMoney(String(r.monthly_rate).replace(/\.\d+$/,''));
         }
@@ -1280,8 +1280,8 @@ function normalizeSupabaseFormsite(row){
   const moveout = raw['81'] ? raw['82'] : (raw['83'] || '');
   const src     = raw['26'] || '';
   const updates = {};
-  if(movein  && !cached.move_in)     updates.move_in     = movein;
-  if(moveout && !cached.move_out)    updates.move_out    = moveout;
+  if(movein  && !cached.move_in)     updates.move_in     = toNYDate(movein) || movein;
+  if(moveout && !cached.move_out)    updates.move_out    = toNYDate(moveout) || moveout;
   if(src     && !cached.lead_source) updates.lead_source = src;
   if(Object.keys(updates).length){
     editableCache[ref] = { ...cached, ...updates };
@@ -3933,12 +3933,8 @@ async function openRmsModal(){
 }
 
 // Normalise a stored date to YYYY-MM-DD (accepts YYYY-MM-DD, timestamps, or MM/DD/YYYY)
-function rmsISODate(v){
-  const t = String(v||'').trim();
-  const us = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(us) return `${us[3]}-${us[1].padStart(2,'0')}-${us[2].padStart(2,'0')}`;
-  return toNYDate(t);
-}
+// Any date the forms send (2026-11-21, 11/21/2026, Nov 21, 2026 …) → YYYY-MM-DD for RMS
+function rmsISODate(v){ return toNYDate(String(v||'').trim()); }
 // The applicant's stay dates for RMS, from the dashboard fields
 function rmsStayDates(a){
   const d = getNYData(a.ref_number);
@@ -4372,7 +4368,8 @@ async function rmsCreateReservation(){
 
   const d = getNYData(a.ref_number);
   const { moveIn, moveOut } = rmsStayDates(a);
-  if(!moveIn || !moveOut){ errEl.textContent = 'Move-in and move-out dates are required.'; return; }
+  if(!moveIn || !moveOut){ errEl.textContent = 'Move-in and move-out dates are required (or couldn\'t be read — check them on the dashboard).'; return; }
+  if(moveOut <= moveIn){ errEl.textContent = `Move-out (${fmtMoveDatePlain(moveOut)}) must be after move-in (${fmtMoveDatePlain(moveIn)}) — check the dates on the dashboard.`; return; }
 
   const btn = document.getElementById('rms-submit-btn');
   btn.textContent = 'Creating…'; btn.disabled = true;
@@ -4594,8 +4591,18 @@ function addDaysISO(iso, n){
 function toNYDate(d){
   const v = String(d||'').trim();
   if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-  const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); // MM/DD/YYYY as typed in the forms
-  if(us) return `${us[3]}-${us[1].padStart(2,'0')}-${us[2].padStart(2,'0')}`;
+  const ok = (y,m,dd) => (m>=1 && m<=12 && dd>=1 && dd<=new Date(Date.UTC(y,m,0)).getUTCDate()) ? `${y}-${String(m).padStart(2,'0')}-${String(dd).padStart(2,'0')}` : '';
+  // 2026/11/21, 2026.11.21, 2026-1-5
+  const ymd = v.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);
+  if(ymd) return ok(+ymd[1], +ymd[2], +ymd[3]);
+  // 11/21/2026 (US forms, month first); 21/11/2026 is read day first only when the first number can't be a month
+  const mdy = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if(mdy){ const a = +mdy[1], b = +mdy[2], y = +mdy[3]; return a > 12 ? ok(y, b, a) : ok(y, a, b); }
+  // "Nov 21, 2026", "21 Nov 2026", "November 21 2026"
+  const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  const mn = v.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/) , nm = v.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})$/);
+  if(mn && MONTHS.includes(mn[1].slice(0,3).toLowerCase())) return ok(+mn[3], MONTHS.indexOf(mn[1].slice(0,3).toLowerCase())+1, +mn[2]);
+  if(nm && MONTHS.includes(nm[2].slice(0,3).toLowerCase())) return ok(+nm[3], MONTHS.indexOf(nm[2].slice(0,3).toLowerCase())+1, +nm[1]);
   const hasZone = hasTZ(v);
   if(!hasZone && /^\d{4}-\d{2}-\d{2}[ T]/.test(v)) return v.slice(0,10);
   const date = new Date(v);
