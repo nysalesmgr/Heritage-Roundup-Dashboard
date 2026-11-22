@@ -1431,8 +1431,8 @@ function renderRenewalsPage(){
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','reservation_no','text')"><span class="cell-val${!r.reservation_no?' empty':''}">${esc(r.reservation_no||'—')}</span></td>
       <td><div class="td-name">${esc((r.first_name||'')+' '+(r.last_name||''))}</div></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','unit','text')"><span class="cell-val${!r.unit?' empty':''}">${esc(r.unit||'—')}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtDate(r.move_in):'—'}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtDate(r.move_out):'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtMoveDate(r.move_in):'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtMoveDate(r.move_out):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','monthly_rate','text')"><span class="cell-val${!r.monthly_rate?' empty':''}">${esc(r.monthly_rate||'—')}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','incentives_pct','text')"><span class="cell-val${!r.incentives_pct?' empty':''}">${esc(r.incentives_pct||'—')}</span></td>
       <td><span class="cell-val">${calcRenewalIncentive(r)}</span></td>
@@ -1464,8 +1464,8 @@ function renderRenewals(){
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','reservation_no','text')"><span class="cell-val${!r.reservation_no?' empty':''}">${esc(r.reservation_no||'—')}</span></td>
       <td><div class="td-name">${esc((r.first_name||'')+' '+(r.last_name||''))}</div></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','unit','text')"><span class="cell-val${!r.unit?' empty':''}">${esc(r.unit||'—')}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtDate(r.move_in):'—'}</span></td>
-      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtDate(r.move_out):'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_in','date')"><span class="cell-val${!r.move_in?' empty':''}">${r.move_in?fmtMoveDate(r.move_in):'—'}</span></td>
+      <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','move_out','date')"><span class="cell-val${!r.move_out?' empty':''}">${r.move_out?fmtMoveDate(r.move_out):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','agr_date','date')"><span class="cell-val${!r.agr_date?' empty':''}">${r.agr_date?fmtDate(r.agr_date):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','payment_due','date')"><span class="cell-val${!r.payment_due?' empty':''}">${r.payment_due?fmtDate(r.payment_due):'—'}</span></td>
       <td class="editable-cell" onclick="editRenewalCell(this,'${escJs(r.id)}','remarks','text')"><span class="cell-val${!r.remarks?' empty':''}">${esc(r.remarks||'—')}</span></td>
@@ -1485,7 +1485,7 @@ function editRenewalCell(td, id, field, type){
   const save = () => {
     const val = field==='monthly_rate' ? formatMoney(input.value) : field==='incentives_pct' ? formatPercent(input.value) : input.value;
     if(row) row[field] = val;
-    td.innerHTML=`<span class="cell-val${!val?' empty':''}">${val ? (type==='date'?fmtDate(val):esc(val)) : '—'}</span>`;
+    td.innerHTML=`<span class="cell-val${!val?' empty':''}">${val ? (type==='date'?(isMoveField(field)?fmtMoveDate(val):fmtDate(val)):esc(val)) : '—'}</span>`;
     fetch(`${SUPABASE_URL}/rest/v1/renewals?id=eq.${id}`, {
       method:'PATCH', headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body: JSON.stringify({[field]:val})
@@ -1775,7 +1775,7 @@ function renderWeeklyPage(){
         <td>${badge(a.status)}</td>
         <td>${esc(d.season||'—')}</td>
         <td>${esc(unit||'—')}</td>
-        <td>${mi ? fmtDate(mi) : '—'} – ${mo ? fmtDate(mo) : '—'}</td>
+        <td>${mi ? fmtMoveDate(mi) : '—'} – ${mo ? fmtMoveDate(mo) : '—'}</td>
         <td>${esc(rent||'—')}</td>
         <td>${wkDates(d.vmu)}</td>
         <td>${wkDates(d.ipt)}</td>
@@ -2001,8 +2001,8 @@ function renderFinishLine(){
       ${flCell(a.ref_number,'reservation_no','text')}
       <td onclick="openPanel('${escJs(a.ref_number)}')" style="cursor:pointer"><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
       <td><span class="td-unit">${esc(d.unit||'—')}</span></td>
-      <td><span class="td-date">${d.move_in?fmtDate(d.move_in):'—'}</span></td>
-      <td><span class="td-date">${d.move_out?fmtDate(d.move_out):'—'}</span></td>
+      <td><span class="td-date">${d.move_in?fmtMoveDate(d.move_in):'—'}</span></td>
+      <td><span class="td-date">${d.move_out?fmtMoveDate(d.move_out):'—'}</span></td>
       <td class="editable-cell" onclick="editCell(this,'${escJs(a.ref_number)}','agr_date','date')"><span class="cell-val${!agrDateStored?' empty':''}">${agrDateStored?fmtDate(agrDateStored):'—'}</span></td>
       <td class="editable-cell" onclick="editCell(this,'${escJs(a.ref_number)}','payment_due','date')"><span class="cell-val${!payDue?' empty':''}">${payDue?fmtDate(payDue):'—'}</span></td>
       ${flCell(a.ref_number,'remarks','text')}
@@ -2029,8 +2029,8 @@ function renderRecent(){
       <td>${badge(a.status)}</td>
       <td><div class="td-name">${esc(a.first_name||'')} ${esc(a.last_name||'')}</div><div class="td-email">${esc(a.email||'')}</div></td>
       <td><div class="td-unit">${esc(getNYData(a.ref_number).unit || aptTitle(a))}${bedroomPill(a)}</div></td>
-      <td><span class="td-date">${fmtDate(getNYData(a.ref_number).move_in || (a._source==='Booking Engine' ? a.start_date : a.formsite_movein||''))}</span></td>
-      <td><span class="td-date">${fmtDate(getNYData(a.ref_number).move_out || (a._source==='Booking Engine' ? a.end_date : a.formsite_moveout||''))}</span></td>
+      <td><span class="td-date">${fmtMoveDate(getNYData(a.ref_number).move_in || (a._source==='Booking Engine' ? a.start_date : a.formsite_movein||''))}</span></td>
+      <td><span class="td-date">${fmtMoveDate(getNYData(a.ref_number).move_out || (a._source==='Booking Engine' ? a.end_date : a.formsite_moveout||''))}</span></td>
       <td>${srcBadge(a._source)}</td>
     </tr>`).join('');
 }
@@ -2130,7 +2130,7 @@ function editCell(td, ref, field, type){
       else if(v.includes('fall')||v.includes('academic')||v.includes('9 month')||v.includes('12 month')) seasonStyle = 'background:#E9D5FF;color:#6B21A8;border-radius:4px;padding:2px 8px;font-weight:600;font-size:11px;';
       td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}" style="${seasonStyle}">${val&&val!=='—'?esc(val):'—'}</span>`;
     } else {
-      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?fmtDate(val):esc(val)):'—'}</span>`;
+      td.innerHTML=`<span class="cell-val${!val||val==='—'?' empty':''}">${val&&val!=='—'?(type==='date'?(isMoveField(field)?fmtMoveDate(val):fmtDate(val)):esc(val)):'—'}</span>`;
     }
     // Update commission amount if relevant fields changed
     if(['incentives','monthly_rent','move_in','move_out','unit'].includes(field)){
@@ -2311,7 +2311,7 @@ function calcCommission(a){
 function nyCell(ref, field, type, fallback){
   const cached = getNYData(ref);
   const val = cached[field]||(fallback||'');
-  const display = val && val!=='—' ? (type==='date' ? fmtDate(val) : esc(val)) : '—';
+  const display = val && val!=='—' ? (type==='date' ? (isMoveField(field) ? fmtMoveDate(val) : fmtDate(val)) : esc(val)) : '—';
   let seasonStyle = '';
   if(field==='season' && val){
     const v = val.toLowerCase();
@@ -2456,13 +2456,13 @@ function openPanel(ref){
   const d = getNYData(a.ref_number);
   if(isBookingEngine){
     document.getElementById('t-apt').textContent      = a.apartment||'—';
-    document.getElementById('t-movein').textContent   = fmtDatePlain(a.start_date);
-    document.getElementById('t-moveout').textContent  = fmtDatePlain(a.end_date);
+    document.getElementById('t-movein').textContent   = fmtMoveDatePlain(a.start_date);
+    document.getElementById('t-moveout').textContent  = fmtMoveDatePlain(a.end_date);
     document.getElementById('t-rate').textContent     = a.monthly_rate||'—';
   } else {
     document.getElementById('t-apt').textContent      = d.unit||'—';
-    document.getElementById('t-movein').textContent   = d.move_in ? fmtDatePlain(d.move_in) : '—';
-    document.getElementById('t-moveout').textContent  = d.move_out ? fmtDatePlain(d.move_out) : '—';
+    document.getElementById('t-movein').textContent   = d.move_in ? fmtMoveDatePlain(d.move_in) : '—';
+    document.getElementById('t-moveout').textContent  = d.move_out ? fmtMoveDatePlain(d.move_out) : '—';
     document.getElementById('t-rate').textContent     = d.monthly_rent||'—';
   }
   // RMS reservation number (set by Create in RMS Cloud; editable)
@@ -3869,7 +3869,7 @@ async function openRmsModal(){
     const moveOutDisplay = d.move_out || a.end_date   || a.formsite_moveout || '';
     document.getElementById('rms-applicant-summary').innerHTML = `
       <div><strong>${esc(a.first_name||'')} ${esc(a.last_name||'')}</strong> · ${esc(a.email||'—')}</div>
-      <div style="color:var(--t3);margin-top:4px">Move-in: ${moveInDisplay?fmtDate(moveInDisplay):'—'} · Move-out: ${moveOutDisplay?fmtDate(moveOutDisplay):'—'} · Unit: ${esc(d.unit||a.apartment||'—')}</div>
+      <div style="color:var(--t3);margin-top:4px">Move-in: ${moveInDisplay?fmtMoveDate(moveInDisplay):'—'} · Move-out: ${moveOutDisplay?fmtMoveDate(moveOutDisplay):'—'} · Unit: ${esc(d.unit||a.apartment||'—')}</div>
     `;
 
     // Check for linked applicants
@@ -4069,8 +4069,8 @@ async function rmsLoadAreas(){
     }, client);
     const areas = (Array.isArray(res) ? res : res.result||[]).filter(x => !x.categoryId || x.categoryId === parseInt(catId));
     areaSel.innerHTML = areas.length
-      ? `<option value="">Select area… (${areas.length} available ${fmtDate(moveIn)} – ${fmtDate(moveOut)})</option>`
-      : `<option value="">No units available ${fmtDate(moveIn)} – ${fmtDate(moveOut)}</option>`;
+      ? `<option value="">Select area… (${areas.length} available ${fmtMoveDate(moveIn)} – ${fmtMoveDate(moveOut)})</option>`
+      : `<option value="">No units available ${fmtMoveDate(moveIn)} – ${fmtMoveDate(moveOut)}</option>`;
     areas.sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''), undefined, {numeric:true}));
     areas.forEach(ar=>{
       const opt = document.createElement('option');
@@ -4354,7 +4354,7 @@ async function rmsSecondBooking(client, propId, main, mainAreaId){
     dateFrom: stay.moveIn + ' 15:00:00', dateTo: stay.moveOut + ' 11:00:00',
   }, client);
   if(!(Array.isArray(free) ? free : free.result||[]).some(x => String(x.id) === String(area.id)))
-    throw new Error(`Linked applicant's unit "${unit}" is not available for ${fmtDate(stay.moveIn)} – ${fmtDate(stay.moveOut)}.`);
+    throw new Error(`Linked applicant's unit "${unit}" is not available for ${fmtMoveDate(stay.moveIn)} – ${fmtMoveDate(stay.moveOut)}.`);
   return { la, area, stay };
 }
 
@@ -4614,6 +4614,19 @@ function fmtDatePlain(d){
 }
 // Same, safe to put into HTML
 function fmtDate(d){ return esc(fmtDatePlain(d)); }
+// Move-in / move-out dates are written month first: "Nov 21, 2026"
+function fmtMoveDatePlain(d){
+  if(!d||d==='—') return '—';
+  try{
+    const iso = toNYDate(d);
+    if(!iso) return String(d);
+    const [yyyy,mm,dd] = iso.split('-');
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mm,10)-1];
+    return mon ? `${mon} ${parseInt(dd,10)}, ${yyyy}` : String(d);
+  }catch(e){ return String(d); }
+}
+function fmtMoveDate(d){ return esc(fmtMoveDatePlain(d)); }
+const isMoveField = f => f === 'move_in' || f === 'move_out';
 function fmtDateTime(d){
   if(!d) return '—';
   try{
