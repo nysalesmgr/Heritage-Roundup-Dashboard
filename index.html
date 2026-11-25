@@ -2092,7 +2092,7 @@ async function loadEditableData(){
 }
 
 function editCell(td, ref, field, type){
-  const cur = getNYData(ref)[field]||'';
+  let cur = getNYData(ref)[field]||'';
   let input;
   const isSelect = type==='season' || type==='student';
 
@@ -2102,7 +2102,9 @@ function editCell(td, ref, field, type){
     opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; input.appendChild(op); });
   } else if(type==='student'){
     input = document.createElement('select');
-    const opts = currentProperty==='boston' ? ['—','Freshmen','Freshmen Local','Inbound/ Dorm','Inbound/ Luxury Condo','Inbound/ American, Greencard'] : ['—','Freshmen','Freshmen Local','Inbound/ Dorm','Inbound/ Luxury Condo','Inbound/ American, Greencard','NYSE'];
+    const opts = currentProperty==='boston' ? ['—','Freshmen/ International','Freshmen/ American, Greencard','Inbound/ Dorm','Inbound/ Luxury Condo','Inbound/ American, Greencard'] : ['—','Freshmen/ International','Freshmen/ American, Greencard','Inbound/ Dorm','Inbound/ Luxury Condo','Inbound/ American, Greencard','NYSE'];
+    // Older names (renamed 25 Nov 2026) still show as selected
+    if(cur === 'Freshmen') cur = 'Freshmen/ International'; else if(cur === 'Freshmen Local') cur = 'Freshmen/ American, Greencard';
     opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; if(o===cur) op.selected=true; input.appendChild(op); });
   } else {
     input = document.createElement('input');
